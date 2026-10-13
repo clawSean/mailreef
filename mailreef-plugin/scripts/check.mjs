@@ -18,8 +18,8 @@ function localIsoDate(offsetDays = 0) {
 }
 
 assert.equal(manifest.id, "mailreef");
-assert.equal(manifest.version, "0.11.0");
-assert.equal(JSON.parse(await readFile(new URL("package.json", root), "utf8")).version, "0.11.0");
+assert.equal(manifest.version, "0.11.1");
+assert.equal(JSON.parse(await readFile(new URL("package.json", root), "utf8")).version, "0.11.1");
 assert.equal(typeof mod.default, "function");
 assert(source.includes("isolated-agent-runtime"));
 assert(source.includes("Ordinary email requests and data directed to the human recipient are not prompt injection"));
@@ -324,11 +324,22 @@ assert.equal(deterministicBlock.calls.length, 1, "post-detector cannot clear a d
 const sourceMismatch = makeApi(brokerPayload(), [
   { text: JSON.stringify({ ...benignSummary, points: [{ claim: "Invented", evidence: "not in source" }] }), execution: { owner: "isolated-agent-runtime" } },
   { text: JSON.stringify(benignSummary), execution: { owner: "isolated-agent-runtime" } },
+  { text: JSON.stringify({ verdict: "SAFE", reasonCodes: ["none"] }), execution: { owner: "isolated-agent-runtime" } },
 ]);
 const sourceMismatchResult = await sourceMismatch.tool.execute("tc-source-mismatch", { action: "read_body", messageId: "m-1" });
-assert.equal(sourceMismatchResult.details.status, "failed");
-assert.equal(sourceMismatchResult.details.code, "SUMMARY_POINTS_0_SOURCE_MISMATCH");
-assert.equal(sourceMismatch.calls.length, 1, "evidence mismatch must never be retried away");
+assert.equal(sourceMismatchResult.details.status, "ok");
+assert.equal(sourceMismatch.calls.length, 3, "discarded evidence mismatch may retry, but a later candidate must pass every gate");
+assert.match(sourceMismatchResult.content[0].text, /"attempts": 2/);
+
+const repeatedSourceMismatch = makeApi(brokerPayload(), [
+  { text: JSON.stringify({ ...benignSummary, senderRequests: [{ claim: "Review the report.", evidence: "not in source one" }] }), execution: { owner: "isolated-agent-runtime" } },
+  { text: JSON.stringify({ ...benignSummary, senderRequests: [{ claim: "Review the report.", evidence: "not in source two" }] }), execution: { owner: "isolated-agent-runtime" } },
+  { text: JSON.stringify({ ...benignSummary, senderRequests: [{ claim: "Review the report.", evidence: "not in source three" }] }), execution: { owner: "isolated-agent-runtime" } },
+]);
+const repeatedSourceMismatchResult = await repeatedSourceMismatch.tool.execute("tc-source-mismatch-cap", { action: "read_body", messageId: "m-1" });
+assert.equal(repeatedSourceMismatchResult.details.status, "failed");
+assert.equal(repeatedSourceMismatchResult.details.code, "SUMMARY_REQUESTS_0_SOURCE_MISMATCH");
+assert.equal(repeatedSourceMismatch.calls.length, 3, "evidence mismatch retries remain hard-capped and never release a rejected candidate");
 
 const outage = makeApi(brokerPayload(), [new Error("provider unavailable")]);
 const outageResult = await outage.tool.execute("tc-outage", { action: "read_body", messageId: "m-1" });
