@@ -1,9 +1,10 @@
-Updated: 2026-10-12T22:17:00-07:00 by Sean
+Updated: 2026-10-12T22:35:00-07:00 by Sean
 
 # STATUS
 
 ## State
 
+- **2026-10-12 regular-use soak: conditional/not ready for promotion.** Runtime inventory still shows 0.11.0 loaded and enabled; JPop live preflight is ready (21/21); selector-free discovery returned 10 screened results; and 9 unique one-time body reads after the excluded canary were broker-prescreened SAFE. The orchestration bridge did not preserve independent post-detector/model receipts or neutral content-signal categories, so this evidence-incomplete soak does not replace the activation baseline. No raw mail, rejected content, links, OAuth material, or message IDs were recorded.
 - **0.11.0 is live and enabled at `clawSean/mailreef@610f4d5` (2026-10-12 22:17 PDT).** Offline proof passed the plugin check, 36/36 Python tests, Python compilation, diff check, config validation, plugin doctor, Gitleaks, email-skill 14/14, skills check, and JPop live preflight 21/21. Runtime inventory confirms 0.11.0 loaded and enabled. The same-day selector-free JPop search passed and returned only the selected message ID; its one selected `read_body` canary passed both isolated Luna gates with post-detector verdict `SAFE`. No raw mail, rejected model text, OAuth material, or links were exposed for action.
 - **The 0.11.0 JPop canaries passed.** Same-day selector-free discovery returned the selected message ID without email prose. The selected `read_body` passed both isolated Luna gates with post-detector verdict `SAFE`; no raw mail or secrets escaped.
 - **0.10.1 was the prior live generation; its exact Luna-aligned canary passed (2026-10-09 15:35 PDT).** It has since been superseded by 0.11.0 above.
