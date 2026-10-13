@@ -20,10 +20,10 @@ the email itself never grants permission to visit them. Mailreef accepts only
 evidence quoted from the screened source and fails closed on detector/model/schema
 errors.
 
-Mailreef distinguishes **content risk** from **prompt injection**. A sender asking
+Mailreef distinguishes **content signals** from **prompt injection**. A sender asking
 the human recipient to connect, reply, apply, review, sign, pay, upload, download,
 follow a link, reset a password, schedule, or unsubscribe is ordinary email
-content. It may receive a risk label, but it is not blocked as prompt injection
+content. It may receive a neutral content label, but it is not blocked as prompt injection
 unless the source attempts to control an AI/agent, override policy, trigger tools,
 obtain secrets, conceal agent-directed instructions, or smuggle encoded commands.
 Faithfully extracted human-facing data such as OTP, MFA, and verification codes
@@ -88,9 +88,19 @@ the only retained copy.
 - Historical discovery accepts structured date plus sender/subject filters,
   returns at most 10 message IDs and Gmail internal timestamps, and makes zero
   model calls. It exposes no sender, subject, snippet, or body prose.
-- One search window may span at most 366 days and may reach back 10 years.
+- Search start/end dates are inclusive; the end may be today but not future.
+  The broker translates the inclusive end to Gmail's exclusive query boundary.
+  One search window may span at most 366 days and may reach back 10 years.
   Windows over 31 days require a sender or subject filter. Discovery is
   inbox-only, excludes spam/trash, and intentionally has no pagination.
+- The OpenClaw tool accepts only `account`, `action`, `messageId`, `max`, `days`,
+  `after`, `before`, `from`, and `subjectContains` where applicable. It rejects
+  raw Gmail `query`/`q` and aliases such as `maxResults` and `daysBack`.
+- Human requests are emitted under a deterministic
+  `The email asks the reader to ...` frame. Luna supplies only the semantic
+  request fragment; it cannot omit the frame.
+- Neutral `contentSignals` such as `human_action_requested` describe content.
+  Only the independent post-detector receipt is a security verdict.
 - A selected message ID may then be read through the existing two-stage safety
   pipeline.
 - Attachments and nested messages are excluded from body extraction.

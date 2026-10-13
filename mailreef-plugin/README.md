@@ -18,9 +18,17 @@ fresh zero-tool Luna relay detector. Raw source and blocked candidates are not
 returned in tool details.
 
 The detector targets agent-directed prompt injection and summary relay, not
-ordinary requests to the human recipient. Human CTAs are returned only in the
-descriptive `The email asks the reader to ...` frame, and every envelope remains
-unable to authorize action.
+ordinary requests to the human recipient. Luna returns the meaning of a human
+CTA; deterministic code adds the descriptive
+`The email asks the reader to ...` frame after validation. `contentSignals`
+uses neutral labels such as `human_action_requested`; the separate post-detector
+receipt is the security verdict. Every envelope remains unable to authorize
+action.
+
+The tool contract documents all accepted fields. Use only `account`, `action`,
+`messageId`, `max`, `days`, `after`, `before`, `from`, and `subjectContains` as
+applicable. Raw Gmail `query`/`q` and legacy aliases such as `maxResults` or
+`daysBack` are intentionally unsupported.
 
 The broker uses deterministic local tripwires and has no Ollama or local-model
 runtime dependency.
@@ -30,7 +38,8 @@ Defaults:
 - account: `sean`
 - allowed accounts: `sean` only until additional isolated OAuth grants are activated
 - recent scope: 5 messages / 7 days
-- historical discovery: 10 IDs/timestamps, 366-day window, 10-year age floor,
+- historical discovery: 10 IDs/timestamps, inclusive dates through today,
+  366-day window, 10-year age floor,
   sender/subject selector, inbox-only, no pagination
 - summarizer: `openai/gpt-5.6-luna`
 - post-detector: `openai/gpt-5.6-luna`

@@ -47,7 +47,7 @@ TOKENINFO_URL = 'https://www.googleapis.com/oauth2/v1/tokeninfo'
 
 DEFAULT_MAX_LIST = 5
 DEFAULT_DAYS_BACK = 7
-BROKER_VERSION = '1.6.0'
+BROKER_VERSION = '1.7.0'
 MAX_SEARCH_RESULTS = 10
 MAX_SEARCH_WINDOW_DAYS = 366
 MAX_SEARCH_AGE_DAYS = 3660
@@ -423,7 +423,10 @@ def validate_search_filters(
     after_date = _parse_search_date(after, 'after')
     before_date = _parse_search_date(before, 'before')
     today = datetime.date.today()
-    window_days = (before_date - after_date).days
+    # Caller dates are inclusive. Gmail's before: operator is exclusive, so the
+    # query boundary is translated in _search_messages instead of forcing callers
+    # to supply tomorrow (which would violate the no-future-date contract).
+    window_days = (before_date - after_date).days + 1
     if window_days < 1 or window_days > MAX_SEARCH_WINDOW_DAYS:
         raise ValueError('search window must be between 1 and 366 days')
     if after_date < today - datetime.timedelta(days=MAX_SEARCH_AGE_DAYS):
@@ -462,7 +465,7 @@ def _search_messages(
     )
     query_parts = [
         f'after:{after_date.strftime("%Y/%m/%d")}',
-        f'before:{before_date.strftime("%Y/%m/%d")}',
+        f'before:{(before_date + datetime.timedelta(days=1)).strftime("%Y/%m/%d")}',
     ]
     if from_filter:
         query_parts.append(f'from:{from_filter}')

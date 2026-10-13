@@ -149,6 +149,7 @@ class BrokerSecurityTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             broker.validate_search_filters(after=after, before=before)
         broker.validate_search_filters(after=after, before=before, subject_contains="invoice")
+        broker.validate_search_filters(after=today.isoformat(), before=today.isoformat())
 
     def test_search_always_scopes_to_inbox_and_excludes_spam_trash(self):
         today = broker.datetime.date.today()
@@ -166,6 +167,10 @@ class BrokerSecurityTests(unittest.TestCase):
         self.assertEqual(params["labelIds"], ["INBOX"])
         self.assertEqual(params["includeSpamTrash"], "false")
         self.assertNotIn("in:anywhere", params["q"])
+        self.assertIn(
+            f'before:{(today + broker.datetime.timedelta(days=1)).strftime("%Y/%m/%d")}',
+            params["q"],
+        )
 
     def test_search_keeps_operator_like_subject_text_inside_quotes(self):
         today = broker.datetime.date.today()
