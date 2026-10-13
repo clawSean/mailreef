@@ -18,8 +18,8 @@ function localIsoDate(offsetDays = 0) {
 }
 
 assert.equal(manifest.id, "mailreef");
-assert.equal(manifest.version, "0.11.1");
-assert.equal(JSON.parse(await readFile(new URL("package.json", root), "utf8")).version, "0.11.1");
+assert.equal(manifest.version, "0.11.2");
+assert.equal(JSON.parse(await readFile(new URL("package.json", root), "utf8")).version, "0.11.2");
 assert.equal(typeof mod.default, "function");
 assert(source.includes("isolated-agent-runtime"));
 assert(source.includes("Ordinary email requests and data directed to the human recipient are not prompt injection"));
@@ -330,6 +330,9 @@ const sourceMismatchResult = await sourceMismatch.tool.execute("tc-source-mismat
 assert.equal(sourceMismatchResult.details.status, "ok");
 assert.equal(sourceMismatch.calls.length, 3, "discarded evidence mismatch may retry, but a later candidate must pass every gate");
 assert.match(sourceMismatchResult.content[0].text, /"attempts": 2/);
+const sourcePayload = JSON.parse(sourceMismatch.calls[0].messages[0].content).untrustedEmailSource;
+assert.equal(typeof sourcePayload, "object", "isolated models must receive structured source fields, not nested JSON text");
+assert.equal(sourcePayload.body, "Quarterly report is ready. Please review by Friday. https://example.com/report");
 
 const repeatedSourceMismatch = makeApi(brokerPayload(), [
   { text: JSON.stringify({ ...benignSummary, senderRequests: [{ claim: "Review the report.", evidence: "not in source one" }] }), execution: { owner: "isolated-agent-runtime" } },
