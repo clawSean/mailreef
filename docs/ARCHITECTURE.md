@@ -10,11 +10,13 @@
    message, and emits only `SAFE` fields with a pinned broker version.
 3. **The summarizer has no tools.** The plugin uses
    `api.runtime.llm.complete` with `execution.mode: isolated-agent-runtime` and
-   Luna. It gets one screened message and returns one closed JSON object.
+   the active turn's explicitly allowlisted Luna or Sol model. It gets one
+   screened message and returns one closed JSON object.
 4. **Deterministic validation is authoritative.** Unknown keys, unsupported
    enums, oversized fields, model-relayed URLs, role/control language, malformed JSON,
    non-verbatim evidence, and improperly framed requests are rejected.
-5. **A fresh post-gate checks relay/fidelity.** A separate Luna completion with
+5. **A fresh post-gate checks relay/fidelity.** A separate completion on the
+   same allowlisted active model, with
    a different system prompt and no shared context compares the screened
    source with the validated candidate. It blocks agent-directed prompt
    manipulation and candidate summaries that relay instructions to the receiving
@@ -58,7 +60,7 @@
   provider exception prose is never returned. Unknown failures collapse to a
   generic fail-closed code.
 - No local inference runtime is required. Deterministic tripwires are an early
-  rejection layer; the isolated Luna stages and strict evidence gate contain
+  rejection layer; the isolated model stages and strict evidence gate contain
   attacks that do not match a known tripwire.
 - Content-risk labels such as financial, credential, urgent, link, or external
   action never determine the injection verdict by themselves. The output remains
@@ -66,8 +68,10 @@
 
 ## Model roles
 
-- `openai/gpt-5.6-luna`: bounded JSON transformation, followed by a fresh
-  source-vs-summary relay-detector call.
+- `openai/gpt-5.6-luna`: configured command/CLI default and Luna-turn route.
+- `openai/gpt-5.6-sol`: ordinary Sol-turn route. OpenClaw binds plugin model
+  authority to the active turn, so Mailreef uses that exact allowlisted model
+  for both isolated gates instead of requiring a manual Luna relay.
 - The calls have separate prompts and no shared context. Neither call has tools,
   workspace access, memory, or an agent execution loop.
 

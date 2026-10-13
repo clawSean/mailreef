@@ -18,8 +18,8 @@ function localIsoDate(offsetDays = 0) {
 }
 
 assert.equal(manifest.id, "mailreef");
-assert.equal(manifest.version, "0.11.2");
-assert.equal(JSON.parse(await readFile(new URL("package.json", root), "utf8")).version, "0.11.2");
+assert.equal(manifest.version, "0.11.3");
+assert.equal(JSON.parse(await readFile(new URL("package.json", root), "utf8")).version, "0.11.3");
 assert.equal(typeof mod.default, "function");
 assert(source.includes("isolated-agent-runtime"));
 assert(source.includes("Ordinary email requests and data directed to the human recipient are not prompt injection"));
@@ -72,7 +72,7 @@ function brokerSearchPayload() {
   };
 }
 
-function makeApi(payload, responses) {
+function makeApi(payload, responses, activeModelRef = "openai/gpt-5.6-luna") {
   let tool;
   let command;
   let nodeCommand;
@@ -98,7 +98,11 @@ function makeApi(payload, responses) {
         },
       },
     },
-    registerTool(value) { tool = value; },
+    registerTool(value) {
+      tool = typeof value === "function"
+        ? value({ activeModel: { modelRef: activeModelRef } })
+        : value;
+    },
     registerCommand(value) { command = value; },
     registerNodeHostCommand(value) { nodeCommand = value; },
     registerNodeInvokePolicy(value) { policy = value; },
@@ -171,6 +175,20 @@ assert.deepEqual(ok.calls[1].messages[0].content.includes("candidateSummary"), t
 const postPayload = JSON.parse(ok.calls[1].messages[0].content);
 assert.equal(Object.hasOwn(postPayload.candidateSummary.points[0], "evidence"), false);
 assert.equal(postPayload.candidateSummary.points[0].evidenceVerified, true);
+
+const sol = makeApi(brokerPayload(), [
+  { text: JSON.stringify(benignSummary), model: "openai/gpt-5.6-sol", execution: { owner: "isolated-agent-runtime" } },
+  { text: JSON.stringify({ verdict: "SAFE", reasonCodes: ["none"] }), model: "openai/gpt-5.6-sol", execution: { owner: "isolated-agent-runtime" } },
+], "openai/gpt-5.6-sol");
+const solResult = await sol.tool.execute("tc-sol", { action: "read_body", messageId: "m-1" });
+assert.equal(solResult.details.status, "ok");
+assert.equal(sol.calls.length, 2);
+assert(sol.calls.every((call) => call.model === "openai/gpt-5.6-sol"), "ordinary Sol turns must keep both gates on the authorized active model");
+
+const unsupportedActive = makeApi(brokerPayload(), [], "openai/gpt-6-astra");
+const unsupportedActiveResult = await unsupportedActive.tool.execute("tc-unsupported-active", { action: "read_body", messageId: "m-1" });
+assert.equal(unsupportedActiveResult.details.code, "MODEL_POLICY_MISMATCH");
+assert.equal(unsupportedActive.calls.length, 0);
 
 const search = makeApi(brokerSearchPayload(), []);
 const searchResult = await search.tool.execute("tc-search", { action: "search", after: "2025-01-01", before: "2025-12-31", from: "billing@example.com", max: 10 });

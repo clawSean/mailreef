@@ -8,8 +8,8 @@ the parent agent.
 ## Security shape
 
 ```text
-Gmail readonly → Mac broker → sanitize + deterministic tripwires → zero-tool Luna summary
-               → deterministic schema/evidence gate → fresh Luna relay gate
+Gmail readonly → Mac broker → sanitize + deterministic tripwires → zero-tool summary
+               → deterministic schema/evidence gate → fresh relay gate
                → explicitly untrusted envelope
 ```
 
@@ -96,8 +96,11 @@ the only retained copy.
 - The OpenClaw tool accepts only `account`, `action`, `messageId`, `max`, `days`,
   `after`, `before`, `from`, and `subjectContains` where applicable. It rejects
   raw Gmail `query`/`q` and aliases such as `maxResults` and `daysBack`.
+- Both isolated gates use the same explicitly allowlisted active turn model:
+  Luna or Sol. This avoids a manual model-alignment relay in ordinary Sol chats
+  without permitting arbitrary models.
 - Human requests are emitted under a deterministic
-  `The email asks the reader to ...` frame. Luna supplies only the semantic
+  `The email asks the reader to ...` frame. The isolated summarizer supplies only the semantic
   request fragment; it cannot omit the frame.
 - Neutral `contentSignals` such as `human_action_requested` describe content.
   Only the independent post-detector receipt is a security verdict.

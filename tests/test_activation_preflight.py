@@ -46,8 +46,8 @@ class ActivationPreflightTests(unittest.TestCase):
             'enabled': False,
             'llm': {
                 'allowModelOverride': True,
-                'allowedModels': [preflight.MODEL],
-                'allowedCompletionModels': [preflight.MODEL],
+                'allowedModels': sorted(preflight.MODELS),
+                'allowedCompletionModels': sorted(preflight.MODELS),
             },
             'config': {
                 'defaultAccount': 'sean',
