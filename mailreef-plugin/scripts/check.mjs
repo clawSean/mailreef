@@ -18,8 +18,8 @@ function localIsoDate(offsetDays = 0) {
 }
 
 assert.equal(manifest.id, "mailreef");
-assert.equal(manifest.version, "0.11.3");
-assert.equal(JSON.parse(await readFile(new URL("package.json", root), "utf8")).version, "0.11.3");
+assert.equal(manifest.version, "0.11.4");
+assert.equal(JSON.parse(await readFile(new URL("package.json", root), "utf8")).version, "0.11.4");
 assert.equal(typeof mod.default, "function");
 assert(source.includes("isolated-agent-runtime"));
 assert(source.includes("Ordinary email requests and data directed to the human recipient are not prompt injection"));
@@ -165,6 +165,7 @@ assert.match(result.content[0].text, /"evidenceVerified": true/);
 assert(!JSON.stringify(result.details).includes("Quarterly report is ready"));
 assert.equal(ok.calls.length, 2);
 assert(ok.calls.every((call) => call.execution.mode === "isolated-agent-runtime"));
+assert(ok.calls.every((call) => call.execution.modelAuthority === "plugin"));
 assert(ok.calls.every((call) => call.messages.length === 1 && call.messages[0].role === "user"));
 assert.equal(ok.calls[0].model, "openai/gpt-5.6-luna");
 assert.equal(ok.calls[1].model, "openai/gpt-5.6-luna");
@@ -176,19 +177,23 @@ const postPayload = JSON.parse(ok.calls[1].messages[0].content);
 assert.equal(Object.hasOwn(postPayload.candidateSummary.points[0], "evidence"), false);
 assert.equal(postPayload.candidateSummary.points[0].evidenceVerified, true);
 
-const sol = makeApi(brokerPayload(), [
-  { text: JSON.stringify(benignSummary), model: "openai/gpt-5.6-sol", execution: { owner: "isolated-agent-runtime" } },
-  { text: JSON.stringify({ verdict: "SAFE", reasonCodes: ["none"] }), model: "openai/gpt-5.6-sol", execution: { owner: "isolated-agent-runtime" } },
+const solCaller = makeApi(brokerPayload(), [
+  { text: JSON.stringify(benignSummary), model: "openai/gpt-5.6-luna", execution: { owner: "isolated-agent-runtime" } },
+  { text: JSON.stringify({ verdict: "SAFE", reasonCodes: ["none"] }), model: "openai/gpt-5.6-luna", execution: { owner: "isolated-agent-runtime" } },
 ], "openai/gpt-5.6-sol");
-const solResult = await sol.tool.execute("tc-sol", { action: "read_body", messageId: "m-1" });
+const solResult = await solCaller.tool.execute("tc-sol", { action: "read_body", messageId: "m-1" });
 assert.equal(solResult.details.status, "ok");
-assert.equal(sol.calls.length, 2);
-assert(sol.calls.every((call) => call.model === "openai/gpt-5.6-sol"), "ordinary Sol turns must keep both gates on the authorized active model");
+assert.equal(solCaller.calls.length, 2);
+assert(solCaller.calls.every((call) => call.model === "openai/gpt-5.6-luna"), "ordinary Sol turns must keep both gates on fixed Luna");
+assert(solCaller.calls.every((call) => call.execution.modelAuthority === "plugin"));
 
-const unsupportedActive = makeApi(brokerPayload(), [], "openai/gpt-6-astra");
-const unsupportedActiveResult = await unsupportedActive.tool.execute("tc-unsupported-active", { action: "read_body", messageId: "m-1" });
-assert.equal(unsupportedActiveResult.details.code, "MODEL_POLICY_MISMATCH");
-assert.equal(unsupportedActive.calls.length, 0);
+const astraCaller = makeApi(brokerPayload(), [
+  { text: JSON.stringify(benignSummary), model: "openai/gpt-5.6-luna", execution: { owner: "isolated-agent-runtime" } },
+  { text: JSON.stringify({ verdict: "SAFE", reasonCodes: ["none"] }), model: "openai/gpt-5.6-luna", execution: { owner: "isolated-agent-runtime" } },
+], "openai/gpt-6-astra");
+const astraCallerResult = await astraCaller.tool.execute("tc-astra-caller", { action: "read_body", messageId: "m-1" });
+assert.equal(astraCallerResult.details.status, "ok");
+assert(astraCaller.calls.every((call) => call.model === "openai/gpt-5.6-luna"));
 
 const search = makeApi(brokerSearchPayload(), []);
 const searchResult = await search.tool.execute("tc-search", { action: "search", after: "2025-01-01", before: "2025-12-31", from: "billing@example.com", max: 10 });

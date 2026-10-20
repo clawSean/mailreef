@@ -1,19 +1,16 @@
-Updated: 2026-10-12T22:47:00-07:00 by Sean
+Updated: 2026-10-20T10:38:36-07:00 by Sean
 
 # STATUS
 
 ## State
 
-- **0.11.3 is staged, not live.** A normal Sol chat reproduced five of five
-  `SUMMARIZER_UPSTREAM_LLM_COMPLETION_NOT_AUTHORIZED` failures before inference.
-  OpenClaw binds plugin-completion authority to the active turn model, so caller
-  guidance cannot solve this reliably. 0.11.3 registers the tool through the
-  trusted tool-factory context, selects the exact active model for both isolated
-  gates, and permits only Luna or Sol in code. Offline plugin security checks and
-  36/36 broker tests pass. Activation still requires an explicit live config
-  approval to expand Mailreef's host LLM allowlist from Luna-only to exact
-  Luna+Sol, followed by a Mailreef-only hot reload and the exact five-message Sol
-  canary. No live config or runtime was changed yet.
+- **0.11.4 is staged, not live.** It replaces the rejected 0.11.3 caller-model
+  workaround with OpenClaw's explicit plugin-owned model authority. Both gates
+  remain fixed to Luna; any invoking turn model may call them, while requester
+  cancellation/liveness and Mailreef's exact Luna-only host allowlists remain
+  enforced. Activation still requires the corresponding OpenClaw core change,
+  one new host opt-in, a Mailreef-only reload, preflight, and bounded canaries.
+  No live config or runtime was changed yet.
 - **0.11.2 is live and enabled at `clawSean/mailreef@212cd6f` (2026-10-12 22:46 PDT).** The regular-use soak exposed two benign exact-evidence false failures. 0.11.1 made source-mismatch candidates retryable without releasing them; 0.11.2 removed nested JSON-string drift by presenting trusted broker fields directly to the isolated models while retaining exact evidence matching, the three-attempt cap, deterministic gates, and the independent post-detector. Offline proof passes plugin security checks, 36/36 Python tests, Python compilation, diff checks, config validation, Gitleaks, and JPop's live preflight 21/21. Runtime inventory reports 0.11.2 loaded/enabled. A fresh five-message JPop batch passed 5/5, all on summarizer attempt 1 with post-detector `SAFE`, and no raw mail was emitted.
 - **0.11.0 is live and enabled at `clawSean/mailreef@610f4d5` (2026-10-12 22:17 PDT).** Offline proof passed the plugin check, 36/36 Python tests, Python compilation, diff check, config validation, plugin doctor, Gitleaks, email-skill 14/14, skills check, and JPop live preflight 21/21. Runtime inventory confirms 0.11.0 loaded and enabled. The same-day selector-free JPop search passed and returned only the selected message ID; its one selected `read_body` canary passed both isolated Luna gates with post-detector verdict `SAFE`. No raw mail, rejected model text, OAuth material, or links were exposed for action.
 - **The 0.11.0 JPop canaries passed.** Same-day selector-free discovery returned the selected message ID without email prose. The selected `read_body` passed both isolated Luna gates with post-detector verdict `SAFE`; no raw mail or secrets escaped.
@@ -39,9 +36,11 @@ Updated: 2026-10-12T22:47:00-07:00 by Sean
 
 ## Next
 
-- After explicit approval, update only Mailreef's host LLM allowlists to exact
-  Luna+Sol, hot-reload 0.11.3, require the 21-check live preflight, and rerun the
-  exact five-message sample from the ordinary Sol topic. Keep 0.11.2 as the live
+- Finish offline proof for the OpenClaw core candidate and Mailreef 0.11.4.
+  Then present the exact activation diff for explicit approval: enable
+  `allowPluginOwnedModelAuthority`, keep both allowlists Luna-only, load the core
+  candidate, reload Mailreef, require the updated preflight, and rerun the exact
+  five-message sample from an ordinary non-Luna topic. Keep 0.11.2 as the live
   baseline until all five reads pass both gates.
 - Use the first explicitly requested account-signup workflow as the bounded real OTP/link canary; do not initiate an account creation merely for testing.
 

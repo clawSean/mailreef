@@ -13,7 +13,7 @@ from typing import Any
 
 
 MODEL = 'openai/gpt-5.6-luna'
-MODELS = {MODEL, 'openai/gpt-5.6-sol'}
+MODELS = {MODEL}
 SCOPES = {
     'https://www.googleapis.com/auth/gmail.readonly',
     'openid',
@@ -95,8 +95,9 @@ def run_checks(args: argparse.Namespace) -> dict[str, Any]:
                 Check('broker path canonical', pathlib.Path(str(cfg.get('macBrokerScriptPath', ''))).expanduser().resolve() == broker, 'configured path matches canonical broker'),
                 Check('plugin models pinned', cfg.get('summarizerModel') == MODEL and cfg.get('postDetectorModel') == MODEL, f'both stages must use {MODEL}'),
                 Check('model override explicitly trusted', llm.get('allowModelOverride') is True, 'host trust must be explicit'),
-                Check('model override allowlist exact', set(llm.get('allowedModels') or []) == MODELS, 'allowedModels must contain only Luna and Sol'),
-                Check('completion allowlist exact', set(llm.get('allowedCompletionModels') or []) == MODELS, 'allowedCompletionModels must contain only Luna and Sol'),
+                Check('plugin-owned model authority explicitly trusted', llm.get('allowPluginOwnedModelAuthority') is True, 'detached isolated model authority must be explicit'),
+                Check('model override allowlist exact', set(llm.get('allowedModels') or []) == MODELS, 'allowedModels must contain only Luna'),
+                Check('completion allowlist exact', set(llm.get('allowedCompletionModels') or []) == MODELS, 'allowedCompletionModels must contain only Luna'),
             ])
         except (OSError, ValueError, TypeError) as exc:
             checks.append(Check('OpenClaw config structure', False, f'invalid config structure: {type(exc).__name__}'))

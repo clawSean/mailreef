@@ -13,9 +13,9 @@ It registers:
 The broker path, Python executable, node target, timeout, and account allowlist
 are operator config. A caller may select only an explicitly allowlisted account;
 the configured default is used when omitted. Successful broker output is transformed by two
-native zero-tool completions on the active turn's explicitly allowlisted Luna
-or Sol model, with strict deterministic validation between them. Raw source and
-blocked candidates are not returned in tool details.
+native zero-tool Luna completions under explicit plugin-owned model authority,
+with strict deterministic validation between them. Raw source and blocked
+candidates are not returned in tool details.
 
 The detector targets agent-directed prompt injection and summary relay, not
 ordinary requests to the human recipient. The isolated summarizer returns the meaning of a human
@@ -41,9 +41,7 @@ Defaults:
 - historical discovery: 10 IDs/timestamps, inclusive dates through today,
   366-day window, 10-year age floor,
   sender/subject selector, inbox-only, no pagination
-- command/CLI gate default: `openai/gpt-5.6-luna`
-- ordinary agent turns: the exact active `openai/gpt-5.6-luna` or
-  `openai/gpt-5.6-sol` model for both gates
+- both gates: fixed `openai/gpt-5.6-luna`, independent of the invoking turn model
 - broker: `/Users/Sean/projects/mailreef/mailreef_broker.py`
 
 Verification:

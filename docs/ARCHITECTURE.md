@@ -9,14 +9,13 @@
    deterministic tripwires to every content-bearing field plus the assembled
    message, and emits only `SAFE` fields with a pinned broker version.
 3. **The summarizer has no tools.** The plugin uses
-   `api.runtime.llm.complete` with `execution.mode: isolated-agent-runtime` and
-   the active turn's explicitly allowlisted Luna or Sol model. It gets one
-   screened message and returns one closed JSON object.
+   `api.runtime.llm.complete` with `execution.mode: isolated-agent-runtime`,
+   `execution.modelAuthority: plugin`, and fixed Luna. It gets one screened
+   message and returns one closed JSON object.
 4. **Deterministic validation is authoritative.** Unknown keys, unsupported
    enums, oversized fields, model-relayed URLs, role/control language, malformed JSON,
    non-verbatim evidence, and improperly framed requests are rejected.
-5. **A fresh post-gate checks relay/fidelity.** A separate completion on the
-   same allowlisted active model, with
+5. **A fresh post-gate checks relay/fidelity.** A separate fixed-Luna completion, with
    a different system prompt and no shared context compares the screened
    source with the validated candidate. It blocks agent-directed prompt
    manipulation and candidate summaries that relay instructions to the receiving
@@ -68,10 +67,10 @@
 
 ## Model roles
 
-- `openai/gpt-5.6-luna`: configured command/CLI default and Luna-turn route.
-- `openai/gpt-5.6-sol`: ordinary Sol-turn route. OpenClaw binds plugin model
-  authority to the active turn, so Mailreef uses that exact allowlisted model
-  for both isolated gates instead of requiring a manual Luna relay.
+- `openai/gpt-5.6-luna`: the only screening model for both isolated gates.
+- OpenClaw authorizes that model through Mailreef's exact host allowlist instead
+  of the invoking turn's model policy. The requester still owns cancellation
+  and liveness; Mailreef cannot use wildcard model authority.
 - The calls have separate prompts and no shared context. Neither call has tools,
   workspace access, memory, or an agent execution loop.
 

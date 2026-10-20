@@ -46,6 +46,7 @@ class ActivationPreflightTests(unittest.TestCase):
             'enabled': False,
             'llm': {
                 'allowModelOverride': True,
+                'allowPluginOwnedModelAuthority': True,
                 'allowedModels': sorted(preflight.MODELS),
                 'allowedCompletionModels': sorted(preflight.MODELS),
             },

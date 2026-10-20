@@ -96,9 +96,9 @@ the only retained copy.
 - The OpenClaw tool accepts only `account`, `action`, `messageId`, `max`, `days`,
   `after`, `before`, `from`, and `subjectContains` where applicable. It rejects
   raw Gmail `query`/`q` and aliases such as `maxResults` and `daysBack`.
-- Both isolated gates use the same explicitly allowlisted active turn model:
-  Luna or Sol. This avoids a manual model-alignment relay in ordinary Sol chats
-  without permitting arbitrary models.
+- Both isolated gates use fixed `openai/gpt-5.6-luna` under explicit
+  plugin-owned model authority. The invoking turn still owns cancellation and
+  liveness, but its model cannot select or constrain the screening model.
 - Human requests are emitted under a deterministic
   `The email asks the reader to ...` frame. The isolated summarizer supplies only the semantic
   request fragment; it cannot omit the frame.

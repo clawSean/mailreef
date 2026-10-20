@@ -25,11 +25,11 @@ live until every item below has a durable receipt.
 7. Run `python3 scripts/activation_preflight.py --phase prepare`; require a
    secret-free `status: ready` receipt before any activation mutation.
 8. Verify the plugin model policy explicitly allows only
-   `openai/gpt-5.6-luna` and `openai/gpt-5.6-sol`.
+   `openai/gpt-5.6-luna`.
 9. Configure native completion trust under
    `plugins.entries.mailreef.llm` with
-   `allowModelOverride: true`, and restrict both `allowedModels` and
-   `allowedCompletionModels` to those two models.
+   `allowModelOverride: true` and `allowPluginOwnedModelAuthority: true`, and
+   restrict both `allowedModels` and `allowedCompletionModels` to Luna only.
 10. Prove local Gateway execution (or an explicitly configured node identity),
     append-only audit, and both bounded modes:
     - recent triage: at most 5 messages / 7 days;
@@ -42,7 +42,7 @@ live until every item below has a durable receipt.
     canary, and one model-outage canary. The last three must fail closed.
 13. Run `python3 scripts/activation_preflight.py --phase live`, then one bounded
     real historical discovery and one selected-message read from an ordinary
-    Sol turn on the Sean account.
+    non-Luna turn on the Sean account. Confirm both gates execute on Luna.
     Confirm discovery returns only IDs/timestamps and no raw body, URL,
     source payload, OAuth material, or detector prose appears in tool details,
     logs, or chat history.
