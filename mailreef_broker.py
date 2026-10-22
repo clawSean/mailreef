@@ -47,7 +47,7 @@ TOKENINFO_URL = 'https://www.googleapis.com/oauth2/v1/tokeninfo'
 
 DEFAULT_MAX_LIST = 5
 DEFAULT_DAYS_BACK = 7
-BROKER_VERSION = '1.7.0'
+BROKER_VERSION = '1.7.1'
 MAX_SEARCH_RESULTS = 10
 MAX_SEARCH_WINDOW_DAYS = 366
 MAX_SEARCH_AGE_DAYS = 3660
@@ -86,6 +86,24 @@ FORBIDDEN_SCOPE_FRAGMENTS = (
     'gmail.insert', 'gmail.labels', 'gmail.settings',
     'mail.google.com',
 )
+
+
+class BrokerOperationalError(RuntimeError):
+    """Stable, non-sensitive failure safe to return across the broker boundary."""
+
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
+
+
+def _google_oauth_error_code(error: urllib.error.HTTPError) -> str:
+    """Read only Google's bounded OAuth error enum; discard all provider prose."""
+    try:
+        payload = json.loads(error.read().decode('utf-8', errors='replace'))
+    except (OSError, UnicodeError, ValueError, TypeError):
+        return ''
+    value = payload.get('error') if isinstance(payload, dict) else ''
+    return value if isinstance(value, str) else ''
 
 
 # ---------------------------------------------------------------------------
@@ -348,8 +366,15 @@ def _get_access_token(account: dict[str, Any]) -> str:
             data=body,
             headers={'Content-Type': 'application/x-www-form-urlencoded'},
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            refreshed = json.loads(resp.read().decode())
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                refreshed = json.loads(resp.read().decode())
+        except urllib.error.HTTPError as exc:
+            if _google_oauth_error_code(exc) == 'invalid_grant':
+                raise BrokerOperationalError('BROKER_REAUTHORIZATION_REQUIRED') from None
+            raise BrokerOperationalError('BROKER_AUTH_UPSTREAM_FAILURE') from None
+        except urllib.error.URLError:
+            raise BrokerOperationalError('BROKER_NETWORK_UNAVAILABLE') from None
         merged = {**token, **refreshed, 'refresh_token': refresh_token}
         if 'expires_in' in refreshed:
             merged['expires_at'] = int(time.time()) + int(refreshed['expires_in'])
@@ -625,12 +650,12 @@ def broker_list(
 ) -> dict[str, Any]:
     """List inbox messages, sanitize+screen, return safe JSON envelope."""
     if not 1 <= max_results <= DEFAULT_MAX_LIST or not 1 <= days_back <= DEFAULT_DAYS_BACK:
-        return _error_envelope(account_label, 'requested scope exceeds broker limits')
+        return _error_envelope(account_label, 'BROKER_SCOPE_LIMIT')
     accounts = _load_accounts_config(config_path)
     account = _get_account(accounts, account_label)
 
     if account.get('can_read') is not True:
-        return _error_envelope(account_label, 'can_read is false for this account')
+        return _error_envelope(account_label, 'BROKER_ACCOUNT_DISABLED')
 
     access_token = _get_access_token(account)
     validate_token_scopes(access_token)
@@ -691,7 +716,7 @@ def broker_search(
     accounts = _load_accounts_config(config_path)
     account = _get_account(accounts, account_label)
     if account.get('can_read') is not True:
-        return _error_envelope(account_label, 'can_read is false for this account')
+        return _error_envelope(account_label, 'BROKER_ACCOUNT_DISABLED')
     access_token = _get_access_token(account)
     validate_token_scopes(access_token)
     stubs = _search_messages(
@@ -743,7 +768,7 @@ def broker_read(
     account = _get_account(accounts, account_label)
 
     if account.get('can_read') is not True:
-        return _error_envelope(account_label, 'can_read is false for this account')
+        return _error_envelope(account_label, 'BROKER_ACCOUNT_DISABLED')
 
     access_token = _get_access_token(account)
     validate_token_scopes(access_token)
@@ -799,14 +824,14 @@ def _success_envelope(account: str, operation: str, data: Any) -> dict[str, Any]
     }
 
 
-def _error_envelope(account: str, error: str) -> dict[str, Any]:
+def _error_envelope(account: str, error_code: str) -> dict[str, Any]:
     return {
         'status': 'error',
         'broker': 'mailreef_broker',
         'broker_version': BROKER_VERSION,
         'account': account,
         'ts': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        'error': error,
+        'errorCode': error_code,
     }
 
 
@@ -842,32 +867,39 @@ def main(argv: list[str] | None = None) -> int:
 
     config_path = args.config
 
-    if args.list:
-        result = broker_list(
-            args.account,
-            max_results=args.max,
-            days_back=args.days,
-            config_path=config_path,
-        )
-    elif args.search:
-        result = broker_search(
-            args.account,
-            after=args.after,
-            before=args.before,
-            from_filter=args.from_filter,
-            subject_contains=args.subject_contains,
-            max_results=args.max,
-            config_path=config_path,
-        )
-    elif args.message_id:
-        result = broker_read(
-            args.account,
-            args.message_id,
-            read_body=args.read_body,
-            config_path=config_path,
-        )
-    else:
-        return 1
+    try:
+        if args.list:
+            result = broker_list(
+                args.account,
+                max_results=args.max,
+                days_back=args.days,
+                config_path=config_path,
+            )
+        elif args.search:
+            result = broker_search(
+                args.account,
+                after=args.after,
+                before=args.before,
+                from_filter=args.from_filter,
+                subject_contains=args.subject_contains,
+                max_results=args.max,
+                config_path=config_path,
+            )
+        elif args.message_id:
+            result = broker_read(
+                args.account,
+                args.message_id,
+                read_body=args.read_body,
+                config_path=config_path,
+            )
+        else:
+            return 1
+    except BrokerOperationalError as exc:
+        result = _error_envelope(args.account, exc.code)
+    except urllib.error.URLError:
+        result = _error_envelope(args.account, 'BROKER_NETWORK_UNAVAILABLE')
+    except PermissionError:
+        result = _error_envelope(args.account, 'BROKER_CREDENTIAL_POLICY_REJECTED')
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0 if result.get('status') == 'ok' else 1

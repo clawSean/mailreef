@@ -4,8 +4,8 @@ import json
 import pathlib
 import tempfile
 import unittest
-from contextlib import redirect_stderr
-from io import StringIO
+from contextlib import redirect_stderr, redirect_stdout
+from io import BytesIO, StringIO
 from unittest import mock
 
 
@@ -310,6 +310,28 @@ class BrokerSecurityTests(unittest.TestCase):
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
             self.assertEqual(json.loads(path.read_text())["refresh_token"], "synthetic")
+
+    def test_invalid_grant_becomes_stable_reauthorization_failure(self):
+        provider_error = broker.urllib.error.HTTPError(
+            "https://oauth2.googleapis.com/token",
+            400,
+            "provider prose must not cross",
+            {},
+            BytesIO(b'{"error":"invalid_grant","error_description":"private prose"}'),
+        )
+        self.assertEqual(broker._google_oauth_error_code(provider_error), "invalid_grant")
+
+        stdout = StringIO()
+        with mock.patch.object(
+            broker,
+            "broker_list",
+            side_effect=broker.BrokerOperationalError("BROKER_REAUTHORIZATION_REQUIRED"),
+        ), redirect_stdout(stdout):
+            status = broker.main(["--account", "jpop", "--list"])
+        result = json.loads(stdout.getvalue())
+        self.assertEqual(status, 1)
+        self.assertEqual(result["errorCode"], "BROKER_REAUTHORIZATION_REQUIRED")
+        self.assertNotIn("private prose", stdout.getvalue())
 
     def test_account_registry_must_be_private_regular_file(self):
         with tempfile.TemporaryDirectory() as temp:

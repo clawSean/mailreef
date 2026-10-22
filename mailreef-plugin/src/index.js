@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const NODE_COMMAND = "mailreef.broker";
 const DEFAULT_SCRIPT_PATH = "/Users/Sean/projects/mailreef/mailreef_broker.py";
-const EXPECTED_BROKER_SHA256 = "2b7fe2673c0b95858c990491f22b25eec23b4f99dfd5fba7d1e9f0b7cd45ad55";
+const EXPECTED_BROKER_SHA256 = "ec0bcc5887fb72c1fb1b219df5214789cb1113233d59e09d0687d9e63454f0b1";
 const DEFAULT_PYTHON = "python3";
 const DEFAULT_TIMEOUT_MS = 120000;
 const DEFAULT_SUMMARY_TIMEOUT_MS = 30000;
@@ -30,6 +30,14 @@ const SAFE_COMPLETION_ERROR_CODES = new Set([
   "LLM_COMPLETION_ABORTED",
   "LLM_COMPLETION_TIMEOUT",
   "LLM_COMPLETION_FAILED",
+]);
+const SAFE_BROKER_FAILURE_CODES = new Set([
+  "BROKER_ACCOUNT_DISABLED",
+  "BROKER_AUTH_UPSTREAM_FAILURE",
+  "BROKER_CREDENTIAL_POLICY_REJECTED",
+  "BROKER_NETWORK_UNAVAILABLE",
+  "BROKER_REAUTHORIZATION_REQUIRED",
+  "BROKER_SCOPE_LIMIT",
 ]);
 const SAFE_CONTENT_SIGNALS = new Set(["none", "financial_content", "credential_content", "human_action_requested", "urgency_or_authority_language"]);
 const REQUEST_FRAME = "The email asks the reader to ";
@@ -194,7 +202,30 @@ async function executeLocalBroker(request) {
     });
     const output = text(result.stdout);
     return output || JSON.stringify({ status: "error", error: "BROKER_EMPTY_OUTPUT" });
-  } catch { return JSON.stringify({ status: "error", error: "BROKER_EXECUTION_FAILED" }); }
+  } catch (error) {
+    const output = text(error?.stdout);
+    if (output) {
+      try {
+        const payload = JSON.parse(output);
+        if (payload?.status === "error"
+          && payload.broker === "mailreef_broker"
+          && payload.broker_version === "1.7.1"
+          && payload.account === request.account
+          && SAFE_BROKER_FAILURE_CODES.has(payload.errorCode)) {
+          return JSON.stringify({
+            status: "error",
+            broker: "mailreef_broker",
+            broker_version: "1.7.1",
+            account: request.account,
+            errorCode: payload.errorCode,
+          });
+        }
+      } catch {
+        // Fail closed below without relaying broker or provider prose.
+      }
+    }
+    return JSON.stringify({ status: "error", errorCode: "BROKER_EXECUTION_FAILED" });
+  }
 }
 async function runLocalBroker(paramsJSON) {
   let raw;
@@ -444,8 +475,17 @@ function assertBrokerSearchEntrySafe(entry) {
   if (entry.screened !== true) throw new Error("BROKER_SEARCH_UNSCREENED");
 }
 async function processBrokerPayload(api, request, payload) {
+  if (payload?.status === "error") {
+    if (payload.broker === "mailreef_broker"
+      && payload.broker_version === "1.7.1"
+      && payload.account === request.account
+      && SAFE_BROKER_FAILURE_CODES.has(payload.errorCode)) {
+      throw new Error(payload.errorCode);
+    }
+    throw new Error("BROKER_FAILED");
+  }
   if (!payload || payload.status !== "ok") throw new Error("BROKER_FAILED");
-  if (payload.broker !== "mailreef_broker" || payload.broker_version !== "1.7.0") throw new Error("BROKER_ATTESTATION_MISMATCH");
+  if (payload.broker !== "mailreef_broker" || payload.broker_version !== "1.7.1") throw new Error("BROKER_ATTESTATION_MISMATCH");
   if (payload.account !== request.account || payload.operation !== request.action) throw new Error("BROKER_SCOPE_MISMATCH");
   const entries = Array.isArray(payload.data) ? payload.data : [payload.data];
   const resultLimit = request.action === "search" ? MAX_SEARCH_LIMIT : MAX_LIST_LIMIT;
@@ -492,17 +532,19 @@ async function executeScreenedRead(api, params) {
   } catch (err) {
     const rawCode = text(err?.message);
     const blocked = rawCode === "POST_DETECTOR_BLOCKED" || rawCode.startsWith("BROKER_BLOCKED_");
-    const code = /^(?:POST_DETECTOR_BLOCKED|BROKER_BLOCKED_[A-Z_]+|BROKER_FAILED|BROKER_ATTESTATION_MISMATCH|BROKER_SCOPE_MISMATCH|BROKER_RESULT_LIMIT|BROKER_ENTRY_MALFORMED|BROKER_MALFORMED_OUTPUT|BROKER_(?:MESSAGE|THREAD)_ID_INVALID|BROKER_INTERNAL_DATE_INVALID|BROKER_SEARCH_UNSCREENED|BROKER_SEARCH_ENTRY_[A-Z0-9_]+|ACCOUNT_(?:CONFIG_INVALID|NOT_ALLOWED|CHARSET_INVALID)|MESSAGE_ID_(?:REQUIRED|CHARSET_INVALID)|SEARCH_[A-Z_]+|MODEL_POLICY_MISMATCH|ISOLATED_COMPLETION_UNAVAILABLE|SUMMARY_[A-Z0-9_]+|POST_DETECTOR_[A-Z0-9_]+|SUMMARIZER_UPSTREAM_[A-Z0-9_]+|POST_DETECTOR_UPSTREAM_[A-Z0-9_]+)$/.test(rawCode)
+    const code = /^(?:POST_DETECTOR_BLOCKED|BROKER_BLOCKED_[A-Z_]+|BROKER_FAILED|BROKER_ATTESTATION_MISMATCH|BROKER_SCOPE_MISMATCH|BROKER_RESULT_LIMIT|BROKER_ENTRY_MALFORMED|BROKER_MALFORMED_OUTPUT|BROKER_(?:ACCOUNT_DISABLED|AUTH_UPSTREAM_FAILURE|CREDENTIAL_POLICY_REJECTED|NETWORK_UNAVAILABLE|REAUTHORIZATION_REQUIRED|SCOPE_LIMIT)|BROKER_(?:MESSAGE|THREAD)_ID_INVALID|BROKER_INTERNAL_DATE_INVALID|BROKER_SEARCH_UNSCREENED|BROKER_SEARCH_ENTRY_[A-Z0-9_]+|ACCOUNT_(?:CONFIG_INVALID|NOT_ALLOWED|CHARSET_INVALID)|MESSAGE_ID_(?:REQUIRED|CHARSET_INVALID)|SEARCH_[A-Z_]+|MODEL_POLICY_MISMATCH|ISOLATED_COMPLETION_UNAVAILABLE|SUMMARY_[A-Z0-9_]+|POST_DETECTOR_[A-Z0-9_]+|SUMMARIZER_UPSTREAM_[A-Z0-9_]+|POST_DETECTOR_UPSTREAM_[A-Z0-9_]+)$/.test(rawCode)
       ? rawCode
       : "UPSTREAM_FAILURE";
     api.logger?.warn?.(`mailreef read withheld: ${code}`);
     const failureClass = blocked ? "security_block"
+      : rawCode === "BROKER_REAUTHORIZATION_REQUIRED" ? "reauthorization_required"
       : rawCode.startsWith("SEARCH_") ? "invalid_search"
         : rawCode.startsWith("SUMMARY_") ? "summary_contract"
           : /^(?:SUMMARIZER|POST_DETECTOR)_UPSTREAM_|^ISOLATED_COMPLETION_|^MODEL_POLICY_/.test(rawCode) ? "model_unavailable"
             : rawCode.startsWith("POST_DETECTOR_") ? "detector_contract"
             : "broker_failure";
     const message = blocked ? "Mailreef blocked this email at a safety gate."
+      : failureClass === "reauthorization_required" ? "Mailreef needs this Google account to be reauthorized with read-only access."
       : failureClass === "invalid_search" ? "Mailreef rejected the search arguments. Use action=search with after and before dates; add from or subjectContains only when needed, including for windows over 31 days."
         : failureClass === "summary_contract" ? "Mailreef withheld the body because the isolated summary did not satisfy the output contract."
           : failureClass === "detector_contract" ? "Mailreef withheld the body because the independent detector did not satisfy its output contract."
