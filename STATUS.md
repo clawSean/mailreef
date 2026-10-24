@@ -1,28 +1,24 @@
-Updated: 2026-10-22T13:58:00-07:00 by Sean
+Updated: 2026-10-24T16:39:00-07:00 by Sean
 
 # STATUS
 
 ## State
 
-- **0.11.5 is source-ready but not yet the active Gateway generation.** The
-  OpenClaw 2026.10.3 plugin-owned model-authority support and Luna-only live
-  configuration are already present; the earlier
-  `SUMMARIZER_UPSTREAM_LLM_COMPLETION_NOT_AUTHORIZED` diagnosis is obsolete.
-  A credentials-only probe now identifies the actual JPop-account failure as
-  Google OAuth `invalid_grant`: the stored refresh grant has expired or been
-  revoked and requires fresh read-only consent.
-- **0.11.5 makes that condition explicit without exposing provider prose.** The
-  broker returns only stable allowlisted operational codes, and the plugin maps
-  `BROKER_REAUTHORIZATION_REQUIRED` to a distinct `reauthorization_required`
-  class instead of a generic broker or security failure. Offline proof passes
-  37/37 Python tests, plugin security checks, Python compilation, and the live
-  22-check configuration/credential preflight. The direct broker probe returns
-  only the safe reauthorization code; no mailbox prose was read.
-- A supported interactive hot reload waited 60 seconds but retained the prior
-  generation because this turn still owns Mailreef work. No Gateway restart was
-  attempted. Reload should be retried from a headless one-shot after this turn;
-  the real-mail classifier smoke remains blocked only on JPop's fresh Google
-  consent from his own device.
+- **0.11.5 is live, enabled, and verified in the active runtime.** The plugin
+  inventory reports `mailreef` version `0.11.5`; no Gateway restart was needed.
+- **Both isolated account lanes are restored.** Fresh exact-scope PKCE grants
+  for `jpop` and `sean` are stored in their dedicated private credential
+  directories. The private registry remains mode `0600`, both rows are
+  `can_read: true`, and each account passes the full live preflight `22/22`.
+- **Bounded real-mail proof passed for both accounts.** Each lane completed a
+  one-message recent list and one selected `read_body`; the Luna summarizer and
+  independent post-detector returned `SAFE`. Raw mail and OAuth material were
+  not released into chat or project files.
+- **OAuth recovery is now durable.** `d8fc993` surfaces expired authorization
+  as the stable `reauthorization_required` class, and `88d75a9` adds a bounded
+  configurable callback wait so human handoffs are not forced into the former
+  five-minute window. Offline proof passes 38/38 Python tests plus the plugin
+  security check.
 - **0.11.2 is live and enabled at `clawSean/mailreef@212cd6f` (2026-10-12 22:46 PDT).** The regular-use soak exposed two benign exact-evidence false failures. 0.11.1 made source-mismatch candidates retryable without releasing them; 0.11.2 removed nested JSON-string drift by presenting trusted broker fields directly to the isolated models while retaining exact evidence matching, the three-attempt cap, deterministic gates, and the independent post-detector. Offline proof passes plugin security checks, 36/36 Python tests, Python compilation, diff checks, config validation, Gitleaks, and JPop's live preflight 21/21. Runtime inventory reports 0.11.2 loaded/enabled. A fresh five-message JPop batch passed 5/5, all on summarizer attempt 1 with post-detector `SAFE`, and no raw mail was emitted.
 - **0.11.0 is live and enabled at `clawSean/mailreef@610f4d5` (2026-10-12 22:17 PDT).** Offline proof passed the plugin check, 36/36 Python tests, Python compilation, diff check, config validation, plugin doctor, Gitleaks, email-skill 14/14, skills check, and JPop live preflight 21/21. Runtime inventory confirms 0.11.0 loaded and enabled. The same-day selector-free JPop search passed and returned only the selected message ID; its one selected `read_body` canary passed both isolated Luna gates with post-detector verdict `SAFE`. No raw mail, rejected model text, OAuth material, or links were exposed for action.
 - **The 0.11.0 JPop canaries passed.** Same-day selector-free discovery returned the selected message ID without email prose. The selected `read_body` passed both isolated Luna gates with post-detector verdict `SAFE`; no raw mail or secrets escaped.
@@ -48,12 +44,10 @@ Updated: 2026-10-22T13:58:00-07:00 by Sean
 
 ## Next
 
-- Publish 0.11.5, hot-reload it after the current retained generation drains,
-  and re-run live preflight without restarting the Gateway.
-- Complete fresh `gmail.readonly` consent for JPop on a JPop-controlled device,
-  then rerun bounded ID-only discovery and selected screened reads. Compare the
-  triage classifier's surfaced, demoted, skipped, and failed outcomes without
-  releasing raw mail into the session.
+- Use the restored JPop lane for the bounded Inbox Island calibration when that
+  work resumes, keeping raw mail behind Mailreef's screening boundary.
+- If Google later revokes either grant, surface the stable reauthorization
+  state and use one deliberate long-window handoff for that account.
 - Use the first explicitly requested account-signup workflow as the bounded real OTP/link canary; do not initiate an account creation merely for testing.
 
 ## Later
