@@ -77,6 +77,22 @@ class OAuthBootstrapTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 oauth.parse_args([])
 
+    def test_cli_accepts_bounded_callback_timeout(self):
+        args = oauth.parse_args([
+            '--expected-email', 'reader@example.com',
+            '--client-secret', '/tmp/client.json',
+            '--callback-timeout-seconds', '900',
+        ])
+        self.assertEqual(args.callback_timeout_seconds, 900)
+        for value in ('59', '3601', 'not-a-number'):
+            with self.subTest(value=value), redirect_stderr(StringIO()):
+                with self.assertRaises(SystemExit):
+                    oauth.parse_args([
+                        '--expected-email', 'reader@example.com',
+                        '--client-secret', '/tmp/client.json',
+                        '--callback-timeout-seconds', value,
+                    ])
+
 
 if __name__ == '__main__':
     unittest.main()

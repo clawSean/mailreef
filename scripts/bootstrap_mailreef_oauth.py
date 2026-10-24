@@ -161,6 +161,16 @@ def _token_identity_and_scopes(access_token: str) -> tuple[str, set[str]]:
     return email, scopes
 
 
+def _callback_timeout(value: str) -> int:
+    try:
+        seconds = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError('callback timeout must be an integer') from exc
+    if seconds < 60 or seconds > 3600:
+        raise argparse.ArgumentTypeError('callback timeout must be between 60 and 3600 seconds')
+    return seconds
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Authorize Mailreef with a separate Gmail-readonly OAuth credential.')
     parser.add_argument('--account', default='sean', help='Local account label (default: sean)')
@@ -168,6 +178,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument('--client-secret', required=True, type=pathlib.Path, help='Downloaded Google Desktop OAuth JSON')
     parser.add_argument('--credential-base', type=pathlib.Path, default=pathlib.Path('~/.openclaw/credentials').expanduser())
     parser.add_argument('--callback-bind', default='127.0.0.1', help='Callback listener address (redirect URI remains loopback)')
+    parser.add_argument('--callback-timeout-seconds', type=_callback_timeout, default=300, help='Wait 60-3600 seconds for the callback (default: 300)')
     parser.add_argument('--no-browser', action='store_true', help='Do not open a browser on this host')
     parser.add_argument('--auth-url-out', type=pathlib.Path, help='Write the authorization URL to a private file')
     parser.add_argument('--replace', action='store_true', help='Replace an existing read token after explicit review')
@@ -199,7 +210,7 @@ def main(argv: list[str] | None = None) -> int:
     state = secrets.token_urlsafe(32)
     _CallbackHandler.result = {}
     server = http.server.HTTPServer((args.callback_bind, 0), _CallbackHandler)
-    server.timeout = 300
+    server.timeout = args.callback_timeout_seconds
     redirect_uri = f'http://127.0.0.1:{server.server_port}/'
     auth_url = client['auth_uri'] + '?' + urllib.parse.urlencode({
         'client_id': client['client_id'],
