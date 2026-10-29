@@ -18,8 +18,8 @@ function localIsoDate(offsetDays = 0) {
 }
 
 assert.equal(manifest.id, "mailreef");
-assert.equal(manifest.version, "0.12.0");
-assert.equal(JSON.parse(await readFile(new URL("package.json", root), "utf8")).version, "0.12.0");
+assert.equal(manifest.version, "0.12.1");
+assert.equal(JSON.parse(await readFile(new URL("package.json", root), "utf8")).version, "0.12.1");
 assert.equal(typeof mod.default, "function");
 assert(source.includes("isolated-agent-runtime"));
 assert(source.includes("Ordinary email requests and data directed to the human recipient are not prompt injection"));
@@ -44,7 +44,7 @@ function brokerPayload(body = "Quarterly report is ready. Please review by Frida
   return {
     status: "ok",
     broker: "mailreef_broker",
-    broker_version: "1.8.0",
+    broker_version: "1.8.1",
     account: "sean",
     operation: "read_body",
     data: {
@@ -63,7 +63,7 @@ function brokerSearchPayload() {
   return {
     status: "ok",
     broker: "mailreef_broker",
-    broker_version: "1.8.0",
+    broker_version: "1.8.1",
     account: "sean",
     operation: "search",
     nextPageToken: "next_page-2=",
@@ -369,6 +369,9 @@ assert.match(sourceMismatchResult.content[0].text, /"attempts": 2/);
 const sourcePayload = JSON.parse(sourceMismatch.calls[0].messages[0].content).untrustedEmailSource;
 assert.equal(typeof sourcePayload, "object", "isolated models must receive structured source fields, not nested JSON text");
 assert.equal(sourcePayload.body, "Quarterly report is ready. Please review by Friday. https://example.com/report");
+const retryPayload = JSON.parse(sourceMismatch.calls[1].messages[0].content);
+assert.equal(retryPayload.retryGuidance.validationCode, "SUMMARY_POINTS_0_SOURCE_MISMATCH");
+assert(!JSON.stringify(retryPayload.retryGuidance).includes("not in source"), "rejected model text must not be relayed into retry guidance");
 
 const repeatedSourceMismatch = makeApi(brokerPayload(), [
   { text: JSON.stringify({ ...benignSummary, senderRequests: [{ claim: "Review the report.", evidence: "not in source one" }] }), execution: { owner: "isolated-agent-runtime" } },
@@ -417,7 +420,7 @@ assert.equal(wrongOperation.calls.length, 0);
 const reauthorization = makeApi({
   status: "error",
   broker: "mailreef_broker",
-  broker_version: "1.8.0",
+  broker_version: "1.8.1",
   account: "jpop",
   errorCode: "BROKER_REAUTHORIZATION_REQUIRED",
 }, []);

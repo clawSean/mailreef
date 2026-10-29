@@ -49,7 +49,7 @@ DEFAULT_MAX_LIST = 5
 DEFAULT_DAYS_BACK = 7
 DEFAULT_SEARCH_PAGE_SIZE = 100
 MAX_SEARCH_PAGE_SIZE = 500
-BROKER_VERSION = '1.8.0'
+BROKER_VERSION = '1.8.1'
 SEARCH_FROM_RE = re.compile(
     r"^(?:[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@)?"
     r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
@@ -230,7 +230,18 @@ _HEURISTIC_PATTERNS = [
     (r'(?i)(decode|decrypt|deobfuscate)\b.{0,60}\b(payload|instruction|message)', 'encoded instruction request'),
 ]
 
-MAX_PRESCREEN_CHARS = 24_000
+MAX_PRESCREEN_CHARS = 240_000
+MAX_SCREENED_OUTPUT_CHARS = 24_000
+
+
+def _bounded_screened_excerpt(text: str) -> str:
+    """Keep downstream model input bounded after the complete text was scanned."""
+    if len(text) <= MAX_SCREENED_OUTPUT_CHARS:
+        return text
+    marker = ' [content shortened after complete security scan] '
+    head_size = 18_000
+    tail_size = MAX_SCREENED_OUTPUT_CHARS - head_size - len(marker)
+    return text[:head_size] + marker + text[-tail_size:]
 
 
 def _heuristic_check(text: str) -> tuple[bool, str, float]:
@@ -612,7 +623,7 @@ def prescreen(
         })
 
     return {
-        'sanitized_text': sanitized if not is_injection else None,
+        'sanitized_text': _bounded_screened_excerpt(sanitized) if not is_injection else None,
         'detector_ran': True,
         'verdict': verdict,
         'reason_code': 'injection_detected' if is_injection else 'none',
