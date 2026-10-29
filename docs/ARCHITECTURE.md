@@ -33,12 +33,13 @@
    configured default. The selected account, broker response account, operation, message
    identifiers, credential directory, and Desktop OAuth client shape are all
    checked before any isolated model call.
-8. **Historical discovery is prose-free.** The caller supplies separate date,
-   sender, and subject fields; the broker constructs the Gmail query and never
-   accepts raw query syntax. Discovery is inbox-only, excludes spam/trash,
-   returns only validated message/thread IDs plus Gmail's internal timestamp,
-   and makes zero model calls. Reading content remains a separate one-message
-   operation through both model gates.
+8. **Historical discovery is prose-free and exhaustible.** The caller supplies
+   separate date, sender, subject, and mailbox-scope fields; the broker
+   constructs the Gmail query and never accepts raw query syntax. Each page
+   returns only validated message/thread IDs, Gmail's internal timestamp, and
+   an opaque validated next-page token. Following that cursor reaches the full
+   result set without a Mailreef total cap and makes zero model calls. Reading
+   content remains a separate one-message operation through both model gates.
 
 ## Execution controls
 

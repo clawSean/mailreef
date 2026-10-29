@@ -85,16 +85,19 @@ the only retained copy.
   registry rows. The tool can select only labels in the operator-configured
   allowlist; it cannot name an arbitrary Gmail account or credential path.
 - Recent triage remains capped at 5 messages / 7 days per operation.
-- Historical discovery accepts structured date plus sender/subject filters,
-  returns at most 10 message IDs and Gmail internal timestamps, and makes zero
-  model calls. It exposes no sender, subject, snippet, or body prose.
+- Historical discovery accepts structured dates, optional sender/subject
+  filters, and an explicit mailbox scope. Each page returns up to Gmail's
+  native 500-message maximum as IDs and internal timestamps, makes zero model
+  calls, and exposes no sender, subject, snippet, or body prose. Follow the
+  opaque `nextPageToken` until absent; there is no Mailreef total-result cap.
 - Search start/end dates are inclusive; the end may be today but not future.
   The broker translates the inclusive end to Gmail's exclusive query boundary.
-  One search window may span at most 366 days and may reach back 10 years.
-  Windows over 31 days require a sender or subject filter. Discovery is
-  inbox-only, excludes spam/trash, and intentionally has no pagination.
+  Search may span the account's full history. `mailbox=inbox` keeps the former
+  inbox-only behavior, `all_mail` includes archived/sent mail while excluding
+  spam/trash, and `all` includes every Gmail message visible to the read-only
+  account.
 - The OpenClaw tool accepts only `account`, `action`, `messageId`, `max`, `days`,
-  `after`, `before`, `from`, and `subjectContains` where applicable. It rejects
+  `after`, `before`, `from`, `subjectContains`, `mailbox`, and `pageToken` where applicable. It rejects
   raw Gmail `query`/`q` and aliases such as `maxResults` and `daysBack`.
 - Both isolated gates use fixed `openai/gpt-5.6-luna` under explicit
   plugin-owned model authority. The invoking turn still owns cancellation and

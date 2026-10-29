@@ -47,15 +47,16 @@ TOKENINFO_URL = 'https://www.googleapis.com/oauth2/v1/tokeninfo'
 
 DEFAULT_MAX_LIST = 5
 DEFAULT_DAYS_BACK = 7
-BROKER_VERSION = '1.7.1'
-MAX_SEARCH_RESULTS = 10
-MAX_SEARCH_WINDOW_DAYS = 366
-MAX_SEARCH_AGE_DAYS = 3660
+DEFAULT_SEARCH_PAGE_SIZE = 100
+MAX_SEARCH_PAGE_SIZE = 500
+BROKER_VERSION = '1.8.0'
 SEARCH_FROM_RE = re.compile(
     r"^(?:[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@)?"
     r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
 )
 SEARCH_SUBJECT_RE = re.compile(r'^[^\x00-\x1f\x7f"\\]{1,120}$')
+SEARCH_PAGE_TOKEN_RE = re.compile(r'^[A-Za-z0-9._~+/=-]{1,2048}$')
+SEARCH_MAILBOXES = frozenset({'inbox', 'all_mail', 'all'})
 
 # Mac-local credential base path
 MAC_CREDENTIAL_BASE = pathlib.Path(
@@ -443,7 +444,9 @@ def validate_search_filters(
     before: str,
     from_filter: str = '',
     subject_contains: str = '',
-    max_results: int = MAX_SEARCH_RESULTS,
+    max_results: int = DEFAULT_SEARCH_PAGE_SIZE,
+    mailbox: str = 'inbox',
+    page_token: str = '',
 ) -> tuple[datetime.date, datetime.date]:
     after_date = _parse_search_date(after, 'after')
     before_date = _parse_search_date(before, 'before')
@@ -452,14 +455,12 @@ def validate_search_filters(
     # query boundary is translated in _search_messages instead of forcing callers
     # to supply tomorrow (which would violate the no-future-date contract).
     window_days = (before_date - after_date).days + 1
-    if window_days < 1 or window_days > MAX_SEARCH_WINDOW_DAYS:
-        raise ValueError('search window must be between 1 and 366 days')
-    if after_date < today - datetime.timedelta(days=MAX_SEARCH_AGE_DAYS):
-        raise ValueError('search after date exceeds the 10-year age floor')
+    if window_days < 1:
+        raise ValueError('search after date must not be later than before date')
     if before_date > today:
         raise ValueError('search before date cannot be in the future')
-    if not 1 <= max_results <= MAX_SEARCH_RESULTS:
-        raise ValueError('search max must be between 1 and 10')
+    if not 1 <= max_results <= MAX_SEARCH_PAGE_SIZE:
+        raise ValueError('search page size must be between 1 and 500')
     if from_filter and not SEARCH_FROM_RE.fullmatch(from_filter):
         raise ValueError('search from filter contains unsupported characters')
     if subject_contains and (
@@ -467,8 +468,10 @@ def validate_search_filters(
         or not SEARCH_SUBJECT_RE.fullmatch(subject_contains)
     ):
         raise ValueError('search subject filter contains unsupported characters')
-    if window_days > 31 and not (from_filter or subject_contains):
-        raise ValueError('search windows over 31 days require a sender or subject filter')
+    if mailbox not in SEARCH_MAILBOXES:
+        raise ValueError('search mailbox must be inbox, all_mail, or all')
+    if page_token and not SEARCH_PAGE_TOKEN_RE.fullmatch(page_token):
+        raise ValueError('search page token contains unsupported characters')
     return after_date, before_date
 
 
@@ -479,14 +482,18 @@ def _search_messages(
     before: str,
     from_filter: str = '',
     subject_contains: str = '',
-    max_results: int = MAX_SEARCH_RESULTS,
-) -> list[dict[str, Any]]:
+    max_results: int = DEFAULT_SEARCH_PAGE_SIZE,
+    mailbox: str = 'inbox',
+    page_token: str = '',
+) -> tuple[list[dict[str, Any]], str]:
     after_date, before_date = validate_search_filters(
         after=after,
         before=before,
         from_filter=from_filter,
         subject_contains=subject_contains,
         max_results=max_results,
+        mailbox=mailbox,
+        page_token=page_token,
     )
     query_parts = [
         f'after:{after_date.strftime("%Y/%m/%d")}',
@@ -496,13 +503,20 @@ def _search_messages(
         query_parts.append(f'from:{from_filter}')
     if subject_contains:
         query_parts.append(f'subject:"{subject_contains}"')
-    data = _gmail_get(access_token, 'messages', {
+    params: dict[str, Any] = {
         'maxResults': str(max_results),
         'q': ' '.join(query_parts),
-        'labelIds': ['INBOX'],
-        'includeSpamTrash': 'false',
-    })
-    return data.get('messages', [])
+        'includeSpamTrash': 'true' if mailbox == 'all' else 'false',
+    }
+    if mailbox == 'inbox':
+        params['labelIds'] = ['INBOX']
+    if page_token:
+        params['pageToken'] = page_token
+    data = _gmail_get(access_token, 'messages', params)
+    next_page_token = str(data.get('nextPageToken') or '')
+    if next_page_token and not SEARCH_PAGE_TOKEN_RE.fullmatch(next_page_token):
+        raise ValueError('Gmail nextPageToken is malformed')
+    return data.get('messages', []), next_page_token
 
 
 def _get_message_metadata(access_token: str, message_id: str) -> dict[str, Any]:
@@ -702,7 +716,9 @@ def broker_search(
     before: str,
     from_filter: str = '',
     subject_contains: str = '',
-    max_results: int = MAX_SEARCH_RESULTS,
+    max_results: int = DEFAULT_SEARCH_PAGE_SIZE,
+    mailbox: str = 'inbox',
+    page_token: str = '',
     config_path: pathlib.Path | None = None,
 ) -> dict[str, Any]:
     """Search historical inbox mail without returning email-authored prose."""
@@ -712,6 +728,8 @@ def broker_search(
         from_filter=from_filter,
         subject_contains=subject_contains,
         max_results=max_results,
+        mailbox=mailbox,
+        page_token=page_token,
     )
     accounts = _load_accounts_config(config_path)
     account = _get_account(accounts, account_label)
@@ -719,13 +737,15 @@ def broker_search(
         return _error_envelope(account_label, 'BROKER_ACCOUNT_DISABLED')
     access_token = _get_access_token(account)
     validate_token_scopes(access_token)
-    stubs = _search_messages(
+    stubs, next_page_token = _search_messages(
         access_token,
         after=after,
         before=before,
         from_filter=from_filter,
         subject_contains=subject_contains,
         max_results=max_results,
+        mailbox=mailbox,
+        page_token=page_token,
     )
     results = []
     for stub in stubs:
@@ -745,6 +765,8 @@ def broker_search(
         'from': from_filter,
         'subjectContains': subject_contains,
         'max': max_results,
+        'mailbox': mailbox,
+        'hasPageToken': bool(page_token),
     }, sort_keys=True, separators=(',', ':')).encode()).hexdigest()[:16]
     broker_audit_log({
         'action': 'broker_search',
@@ -753,7 +775,9 @@ def broker_search(
         'message_ids': [r['id'] for r in results],
         'filter_digest': filter_digest,
     })
-    return _success_envelope(account_label, 'search', results)
+    envelope = _success_envelope(account_label, 'search', results)
+    envelope['nextPageToken'] = next_page_token or None
+    return envelope
 
 
 def broker_read(
@@ -850,12 +874,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     mode.add_argument('--search', action='store_true', help='Search historical inbox messages')
     mode.add_argument('--message-id', help='Fetch specific message')
 
-    p.add_argument('--max', type=int, default=DEFAULT_MAX_LIST)
+    p.add_argument('--max', type=int, default=None)
     p.add_argument('--days', type=int, default=DEFAULT_DAYS_BACK)
     p.add_argument('--after', default='')
     p.add_argument('--before', default='')
     p.add_argument('--from', dest='from_filter', default='')
     p.add_argument('--subject-contains', default='')
+    p.add_argument('--mailbox', choices=sorted(SEARCH_MAILBOXES), default='inbox')
+    p.add_argument('--page-token', default='')
     p.add_argument('--read-body', action='store_true')
     p.add_argument('--config', type=pathlib.Path, default=None,
                    help='Path to mailreef-accounts.json')
@@ -871,7 +897,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.list:
             result = broker_list(
                 args.account,
-                max_results=args.max,
+                max_results=args.max or DEFAULT_MAX_LIST,
                 days_back=args.days,
                 config_path=config_path,
             )
@@ -882,7 +908,9 @@ def main(argv: list[str] | None = None) -> int:
                 before=args.before,
                 from_filter=args.from_filter,
                 subject_contains=args.subject_contains,
-                max_results=args.max,
+                max_results=args.max or DEFAULT_SEARCH_PAGE_SIZE,
+                mailbox=args.mailbox,
+                page_token=args.page_token,
                 config_path=config_path,
             )
         elif args.message_id:

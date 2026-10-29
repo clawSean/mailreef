@@ -26,7 +26,8 @@ receipt is the security verdict. Every envelope remains unable to authorize
 action.
 
 The tool contract documents all accepted fields. Use only `account`, `action`,
-`messageId`, `max`, `days`, `after`, `before`, `from`, and `subjectContains` as
+`messageId`, `max`, `days`, `after`, `before`, `from`, `subjectContains`,
+`mailbox`, and `pageToken` as
 applicable. Raw Gmail `query`/`q` and legacy aliases such as `maxResults` or
 `daysBack` are intentionally unsupported.
 
@@ -38,9 +39,10 @@ Defaults:
 - account: `sean`
 - allowed accounts: `sean` only until additional isolated OAuth grants are activated
 - recent scope: 5 messages / 7 days
-- historical discovery: 10 IDs/timestamps, inclusive dates through today,
-  366-day window, 10-year age floor,
-  sender/subject selector, inbox-only, no pagination
+- historical discovery: 100 IDs/timestamps by default and up to Gmail's native
+  500 per page, inclusive dates through today, full account history, optional
+  sender/subject filters, explicit inbox/all-mail/all scope, and cursor
+  pagination with no Mailreef total-result cap
 - both gates: fixed `openai/gpt-5.6-luna`, independent of the invoking turn model
 - broker: `/Users/Sean/projects/mailreef/mailreef_broker.py`
 

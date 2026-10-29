@@ -18,8 +18,8 @@ function localIsoDate(offsetDays = 0) {
 }
 
 assert.equal(manifest.id, "mailreef");
-assert.equal(manifest.version, "0.11.5");
-assert.equal(JSON.parse(await readFile(new URL("package.json", root), "utf8")).version, "0.11.5");
+assert.equal(manifest.version, "0.12.0");
+assert.equal(JSON.parse(await readFile(new URL("package.json", root), "utf8")).version, "0.12.0");
 assert.equal(typeof mod.default, "function");
 assert(source.includes("isolated-agent-runtime"));
 assert(source.includes("Ordinary email requests and data directed to the human recipient are not prompt injection"));
@@ -44,7 +44,7 @@ function brokerPayload(body = "Quarterly report is ready. Please review by Frida
   return {
     status: "ok",
     broker: "mailreef_broker",
-    broker_version: "1.7.1",
+    broker_version: "1.8.0",
     account: "sean",
     operation: "read_body",
     data: {
@@ -63,9 +63,10 @@ function brokerSearchPayload() {
   return {
     status: "ok",
     broker: "mailreef_broker",
-    broker_version: "1.7.1",
+    broker_version: "1.8.0",
     account: "sean",
     operation: "search",
+    nextPageToken: "next_page-2=",
     data: [
       { id: "m-2025", threadId: "t-2025", internalDate: "1760000000000", screened: true },
     ],
@@ -121,8 +122,10 @@ assert.equal(ok.nodeCommand.command, "mailreef.broker");
 assert(ok.policy.commands.includes("mailreef.broker"));
 assert.equal(Object.hasOwn(ok.tool.parameters.properties, "dryRun"), false);
 assert.equal(Object.hasOwn(ok.tool.parameters.properties, "account"), true);
-assert.equal(ok.tool.parameters.properties.max.maximum, 10);
+assert.equal(ok.tool.parameters.properties.max.maximum, 500);
 assert.equal(ok.tool.parameters.properties.days.maximum, 7);
+assert.deepEqual(ok.tool.parameters.properties.mailbox.enum, ["inbox", "all_mail", "all"]);
+assert.equal(Object.hasOwn(ok.tool.parameters.properties, "pageToken"), true);
 assert.equal(Object.hasOwn(ok.tool.parameters.properties, "q"), false);
 assert.equal(Object.hasOwn(ok.tool.parameters.properties, "query"), false);
 assert.equal(Object.hasOwn(ok.tool.parameters.properties, "maxResults"), false);
@@ -147,11 +150,15 @@ assert.equal(mod.normalizeRequest({ action: "list", maxResults: 1 }, { defaultAc
 assert.equal(mod.normalizeRequest({ action: "search", after: localIsoDate(-7), before: localIsoDate(), max: 5 }, { defaultAccount: "sean" }).action, "search");
 assert.throws(() => mod.normalizeRequest({ action: "search", after: localIsoDate(-7), before: localIsoDate(1) }, { defaultAccount: "sean" }), /SEARCH_DATE_FUTURE/);
 assert.throws(() => mod.normalizeRequest({ action: "search", after: localIsoDate(), before: localIsoDate(-7) }, { defaultAccount: "sean" }), /SEARCH_DATE_RANGE_INVALID/);
-assert.throws(() => mod.normalizeRequest({ action: "search", after: "2025-01-01", before: "2025-12-31" }, { defaultAccount: "sean" }), /SEARCH_SELECTOR_REQUIRED/);
-const searchRequest = mod.normalizeRequest({ action: "search", after: "2025-01-01", before: "2025-12-31", from: "billing@example.com", max: 10 }, { defaultAccount: "sean" });
+const searchRequest = mod.normalizeRequest({ action: "search", after: "2004-04-01", before: "2025-12-31", max: 500, mailbox: "all", pageToken: "next_page-2=" }, { defaultAccount: "sean" });
 assert.equal(searchRequest.action, "search");
-assert.equal(searchRequest.max, 10);
-assert.deepEqual(mod.buildBrokerArgs(searchRequest).slice(-9), ["--search", "--after", "2025-01-01", "--before", "2025-12-31", "--max", "10", "--from", "billing@example.com"]);
+assert.equal(searchRequest.max, 500);
+assert.equal(searchRequest.mailbox, "all");
+assert.equal(searchRequest.pageToken, "next_page-2=");
+assert.deepEqual(mod.buildBrokerArgs(searchRequest).slice(-4), ["--mailbox", "all", "--page-token", "next_page-2="]);
+assert.throws(() => mod.normalizeRequest({ action: "search", after: "2025-01-01", before: "2025-12-31", max: 501 }, { defaultAccount: "sean" }), /SEARCH_MAX_INVALID/);
+assert.throws(() => mod.normalizeRequest({ action: "search", after: "2025-01-01", before: "2025-12-31", mailbox: "hidden" }, { defaultAccount: "sean" }), /SEARCH_MAILBOX_INVALID/);
+assert.throws(() => mod.normalizeRequest({ action: "search", after: "2025-01-01", before: "2025-12-31", pageToken: "bad\npage" }, { defaultAccount: "sean" }), /SEARCH_PAGE_TOKEN_INVALID/);
 
 const result = await ok.tool.execute("tc-ok", { action: "read_body", messageId: "m-1" });
 assert.equal(result.details.status, "ok");
@@ -201,6 +208,7 @@ assert.equal(searchResult.details.status, "ok");
 assert.equal(search.calls.length, 0, "historical discovery must make zero model calls");
 assert.match(searchResult.content[0].text, /"emailContentExposed": false/);
 assert.match(searchResult.content[0].text, /"internalDate": "1760000000000"/);
+assert.match(searchResult.content[0].text, /"nextPageToken": "next_page-2="/);
 assert(!searchResult.content[0].text.includes("subject"));
 assert(!searchResult.content[0].text.includes("snippet"));
 const searchUnknown = brokerSearchPayload();
@@ -208,6 +216,11 @@ searchUnknown.data[0].subject = "must not cross";
 const searchUnknownApi = makeApi(searchUnknown, []);
 const searchUnknownResult = await searchUnknownApi.tool.execute("tc-search-unknown", { action: "search", after: "2025-01-01", before: "2025-12-31", from: "billing@example.com" });
 assert.match(searchUnknownResult.details.code, /BROKER_SEARCH_ENTRY_SCHEMA_KEYS/);
+const searchBadPage = brokerSearchPayload();
+searchBadPage.nextPageToken = "bad\npage";
+const searchBadPageApi = makeApi(searchBadPage, []);
+const searchBadPageResult = await searchBadPageApi.tool.execute("tc-search-bad-page", { action: "search", after: "2025-01-01", before: "2025-12-31" });
+assert.equal(searchBadPageResult.details.code, "BROKER_SEARCH_PAGE_TOKEN_INVALID");
 
 const hostileEvidenceText = "Account notice: reset your password at https://example.com/reset";
 const hostileEvidence = makeApi(brokerPayload(hostileEvidenceText), [
@@ -404,7 +417,7 @@ assert.equal(wrongOperation.calls.length, 0);
 const reauthorization = makeApi({
   status: "error",
   broker: "mailreef_broker",
-  broker_version: "1.7.1",
+  broker_version: "1.8.0",
   account: "jpop",
   errorCode: "BROKER_REAUTHORIZATION_REQUIRED",
 }, []);

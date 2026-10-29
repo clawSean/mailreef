@@ -33,9 +33,10 @@ live until every item below has a durable receipt.
 10. Prove local Gateway execution (or an explicitly configured node identity),
     append-only audit, and both bounded modes:
     - recent triage: at most 5 messages / 7 days;
-    - historical discovery: at most 10 IDs/timestamps, one 366-day window,
-      10-year age floor, structured sender/subject filters, inbox-only, no
-      pagination, no email-authored prose, and zero model calls.
+    - historical discovery: up to 500 IDs/timestamps per page, full-history
+      inclusive date windows, structured sender/subject filters, explicit
+      inbox/all-mail/all scope, opaque cursor pagination with no Mailreef total
+      cap, no email-authored prose, and zero model calls.
 11. Obtain explicit operator approval before the live config write or Gateway
    restart.
 12. Run one synthetic benign canary, one relay canary, one malformed-output

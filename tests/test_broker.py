@@ -140,16 +140,18 @@ class BrokerSecurityTests(unittest.TestCase):
             with self.subTest(field=field, value=value), self.assertRaises(ValueError):
                 broker.validate_search_filters(**kwargs)
         with self.assertRaises(ValueError):
-            broker.validate_search_filters(after=after, before=before, from_filter="a@b.com", max_results=11)
+            broker.validate_search_filters(after=after, before=before, from_filter="a@b.com", max_results=501)
 
-    def test_search_requires_selector_for_wide_window(self):
+    def test_search_allows_full_history_without_selector_and_validates_cursor(self):
         today = broker.datetime.date.today()
-        after = (today - broker.datetime.timedelta(days=90)).isoformat()
+        after = "2004-04-01"
         before = today.isoformat()
+        broker.validate_search_filters(after=after, before=before, max_results=500)
+        broker.validate_search_filters(after=after, before=before, mailbox="all", page_token="opaque_page-2=")
         with self.assertRaises(ValueError):
-            broker.validate_search_filters(after=after, before=before)
-        broker.validate_search_filters(after=after, before=before, subject_contains="invoice")
-        broker.validate_search_filters(after=today.isoformat(), before=today.isoformat())
+            broker.validate_search_filters(after=after, before=before, page_token="bad\npage")
+        with self.assertRaises(ValueError):
+            broker.validate_search_filters(after=after, before=before, mailbox="anything")
 
     def test_search_always_scopes_to_inbox_and_excludes_spam_trash(self):
         today = broker.datetime.date.today()
@@ -188,6 +190,31 @@ class BrokerSecurityTests(unittest.TestCase):
         self.assertEqual(params["labelIds"], ["INBOX"])
         self.assertEqual(params["includeSpamTrash"], "false")
 
+    def test_search_mailbox_scope_and_page_token_are_explicit(self):
+        today = broker.datetime.date.today()
+        after = (today - broker.datetime.timedelta(days=30)).isoformat()
+        before = today.isoformat()
+        with mock.patch.object(
+            broker,
+            "_gmail_get",
+            return_value={"messages": [], "nextPageToken": "next_page-2="},
+        ) as gmail:
+            messages, next_page = broker._search_messages(
+                "synthetic",
+                after=after,
+                before=before,
+                mailbox="all",
+                page_token="current_page-1=",
+                max_results=500,
+            )
+        params = gmail.call_args.args[2]
+        self.assertEqual(messages, [])
+        self.assertEqual(next_page, "next_page-2=")
+        self.assertNotIn("labelIds", params)
+        self.assertEqual(params["includeSpamTrash"], "true")
+        self.assertEqual(params["pageToken"], "current_page-1=")
+        self.assertEqual(params["maxResults"], "500")
+
     def test_search_response_contains_no_email_authored_text(self):
         today = broker.datetime.date.today()
         after = (today - broker.datetime.timedelta(days=365)).isoformat()
@@ -197,7 +224,7 @@ class BrokerSecurityTests(unittest.TestCase):
              mock.patch.object(broker, "_get_account", return_value=account), \
              mock.patch.object(broker, "_get_access_token", return_value="synthetic"), \
              mock.patch.object(broker, "validate_token_scopes"), \
-             mock.patch.object(broker, "_search_messages", return_value=[{"id": "m1", "threadId": "t1", "subject": "secret subject", "snippet": "secret snippet"}]), \
+             mock.patch.object(broker, "_search_messages", return_value=([{"id": "m1", "threadId": "t1", "subject": "secret subject", "snippet": "secret snippet"}], "next_page-2=")), \
              mock.patch.object(broker, "_gmail_get", return_value={"id": "m1", "threadId": "t1", "internalDate": "1760000000000", "payload": {"headers": [{"name": "Date", "value": "forged"}]}}):
             result = broker.broker_search(
                 "sean",
@@ -208,6 +235,7 @@ class BrokerSecurityTests(unittest.TestCase):
         serialized = json.dumps(result)
         self.assertEqual(result["operation"], "search")
         self.assertEqual(result["data"], [{"id": "m1", "threadId": "t1", "internalDate": "1760000000000", "screened": True}])
+        self.assertEqual(result["nextPageToken"], "next_page-2=")
         self.assertNotIn("secret subject", serialized)
         self.assertNotIn("secret snippet", serialized)
         self.assertNotIn("forged", serialized)
