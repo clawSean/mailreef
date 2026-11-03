@@ -18,8 +18,8 @@ function localIsoDate(offsetDays = 0) {
 }
 
 assert.equal(manifest.id, "mailreef");
-assert.equal(manifest.version, "0.12.1");
-assert.equal(JSON.parse(await readFile(new URL("package.json", root), "utf8")).version, "0.12.1");
+assert.equal(manifest.version, "0.12.2");
+assert.equal(JSON.parse(await readFile(new URL("package.json", root), "utf8")).version, "0.12.2");
 assert.equal(typeof mod.default, "function");
 assert(source.includes("isolated-agent-runtime"));
 assert(source.includes("Ordinary email requests and data directed to the human recipient are not prompt injection"));

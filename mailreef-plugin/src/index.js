@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const NODE_COMMAND = "mailreef.broker";
 const DEFAULT_SCRIPT_PATH = "/Users/Sean/projects/mailreef/mailreef_broker.py";
-const EXPECTED_BROKER_SHA256 = "97485a4cb07c16a03e1389c13125db5dc183c52bdf740838c2ae05a4f27b8ffe";
+const EXPECTED_BROKER_SHA256 = "a95c8a894441ec16d6bdcfec1f6985a5007f37bf855875ee7f4e03c8d614a7e3";
 const DEFAULT_PYTHON = "python3";
 const DEFAULT_TIMEOUT_MS = 120000;
 const DEFAULT_SUMMARY_TIMEOUT_MS = 30000;

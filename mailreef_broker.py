@@ -486,6 +486,12 @@ def validate_search_filters(
     return after_date, before_date
 
 
+def _local_midnight_epoch(value: datetime.date) -> int:
+    """Return the Unix timestamp for midnight in the broker host's local zone."""
+    local_midnight = datetime.datetime.combine(value, datetime.time.min)
+    return int(time.mktime(local_midnight.timetuple()))
+
+
 def _search_messages(
     access_token: str,
     *,
@@ -506,9 +512,17 @@ def _search_messages(
         mailbox=mailbox,
         page_token=page_token,
     )
+    # Gmail's date-form search operators are evaluated at UTC midnight, which
+    # silently truncates a local same-day search in negative UTC offsets (for
+    # example, 16:00 Pacific during standard time). Epoch-form operators avoid
+    # that ambiguity. Gmail's epoch-form after: boundary is inclusive, so use
+    # the exact local-midnight timestamp to avoid admitting the previous day's
+    # final second into both adjacent searches.
+    start_epoch = _local_midnight_epoch(after_date)
+    end_epoch = _local_midnight_epoch(before_date + datetime.timedelta(days=1))
     query_parts = [
-        f'after:{after_date.strftime("%Y/%m/%d")}',
-        f'before:{(before_date + datetime.timedelta(days=1)).strftime("%Y/%m/%d")}',
+        f'after:{start_epoch}',
+        f'before:{end_epoch}',
     ]
     if from_filter:
         query_parts.append(f'from:{from_filter}')

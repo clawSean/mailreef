@@ -170,7 +170,8 @@ class BrokerSecurityTests(unittest.TestCase):
         today = broker.datetime.date.today()
         after = (today - broker.datetime.timedelta(days=365)).isoformat()
         before = today.isoformat()
-        with mock.patch.object(broker, "_gmail_get", return_value={"messages": []}) as gmail:
+        with mock.patch.object(broker, "_local_midnight_epoch", side_effect=[1000, 2000]), \
+             mock.patch.object(broker, "_gmail_get", return_value={"messages": []}) as gmail:
             broker._search_messages(
                 "synthetic",
                 after=after,
@@ -182,10 +183,15 @@ class BrokerSecurityTests(unittest.TestCase):
         self.assertEqual(params["labelIds"], ["INBOX"])
         self.assertEqual(params["includeSpamTrash"], "false")
         self.assertNotIn("in:anywhere", params["q"])
-        self.assertIn(
-            f'before:{(today + broker.datetime.timedelta(days=1)).strftime("%Y/%m/%d")}',
-            params["q"],
-        )
+        self.assertIn('after:1000', params["q"])
+        self.assertIn('before:2000', params["q"])
+        self.assertNotIn(today.strftime('%Y/%m/%d'), params["q"])
+
+    def test_search_epoch_bounds_preserve_the_full_local_day(self):
+        target = broker.datetime.date(2026, 11, 2)
+        start = broker._local_midnight_epoch(target)
+        end = broker._local_midnight_epoch(target + broker.datetime.timedelta(days=1))
+        self.assertEqual(end - start, 24 * 60 * 60)
 
     def test_search_keeps_operator_like_subject_text_inside_quotes(self):
         today = broker.datetime.date.today()
