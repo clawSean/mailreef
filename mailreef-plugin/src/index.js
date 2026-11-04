@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const NODE_COMMAND = "mailreef.broker";
 const DEFAULT_SCRIPT_PATH = "/Users/Sean/projects/mailreef/mailreef_broker.py";
-const EXPECTED_BROKER_SHA256 = "a95c8a894441ec16d6bdcfec1f6985a5007f37bf855875ee7f4e03c8d614a7e3";
+const EXPECTED_BROKER_SHA256 = "5023916bd8846e5a721e6c02ccf46648a318314638c289b57ad9af11b1dae347";
 const DEFAULT_PYTHON = "python3";
 const DEFAULT_TIMEOUT_MS = 120000;
 const DEFAULT_SUMMARY_TIMEOUT_MS = 30000;
@@ -218,13 +218,13 @@ async function executeLocalBroker(request) {
         const payload = JSON.parse(output);
         if (payload?.status === "error"
           && payload.broker === "mailreef_broker"
-          && payload.broker_version === "1.8.1"
+          && payload.broker_version === "1.8.2"
           && payload.account === request.account
           && SAFE_BROKER_FAILURE_CODES.has(payload.errorCode)) {
           return JSON.stringify({
             status: "error",
             broker: "mailreef_broker",
-            broker_version: "1.8.1",
+            broker_version: "1.8.2",
             account: request.account,
             errorCode: payload.errorCode,
           });
@@ -537,7 +537,7 @@ function assertBrokerSearchEntrySafe(entry) {
 async function processBrokerPayload(api, request, payload) {
   if (payload?.status === "error") {
     if (payload.broker === "mailreef_broker"
-      && payload.broker_version === "1.8.1"
+      && payload.broker_version === "1.8.2"
       && payload.account === request.account
       && SAFE_BROKER_FAILURE_CODES.has(payload.errorCode)) {
       throw new Error(payload.errorCode);
@@ -545,7 +545,7 @@ async function processBrokerPayload(api, request, payload) {
     throw new Error("BROKER_FAILED");
   }
   if (!payload || payload.status !== "ok") throw new Error("BROKER_FAILED");
-  if (payload.broker !== "mailreef_broker" || payload.broker_version !== "1.8.1") throw new Error("BROKER_ATTESTATION_MISMATCH");
+  if (payload.broker !== "mailreef_broker" || payload.broker_version !== "1.8.2") throw new Error("BROKER_ATTESTATION_MISMATCH");
   if (payload.account !== request.account || payload.operation !== request.action) throw new Error("BROKER_SCOPE_MISMATCH");
   const entries = Array.isArray(payload.data) ? payload.data : [payload.data];
   const resultLimit = request.action === "search" ? MAX_SEARCH_PAGE_SIZE : MAX_LIST_LIMIT;

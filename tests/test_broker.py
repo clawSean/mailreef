@@ -193,6 +193,45 @@ class BrokerSecurityTests(unittest.TestCase):
         end = broker._local_midnight_epoch(target + broker.datetime.timedelta(days=1))
         self.assertEqual(end - start, 24 * 60 * 60)
 
+    def test_search_filters_gmail_boundary_false_positive_by_internal_date(self):
+        target = broker.datetime.date(2026, 10, 28)
+        start = broker._local_midnight_epoch(target)
+        end = broker._local_midnight_epoch(target + broker.datetime.timedelta(days=1))
+        account = {"can_read": True}
+        stubs = [
+            {"id": "previous-second", "threadId": "t1"},
+            {"id": "first-millisecond", "threadId": "t2"},
+            {"id": "last-millisecond", "threadId": "t3"},
+            {"id": "next-midnight", "threadId": "t4"},
+        ]
+        metadata = {
+            "previous-second": {"internalDate": str(start * 1000 - 1000)},
+            "first-millisecond": {"internalDate": str(start * 1000)},
+            "last-millisecond": {"internalDate": str(end * 1000 - 1)},
+            "next-midnight": {"internalDate": str(end * 1000)},
+        }
+
+        def gmail_get(_token, path, _params):
+            return metadata[path.rsplit('/', 1)[-1]]
+
+        with mock.patch.object(broker, "_load_accounts_config", return_value=[{"label": "sean", **account}]), \
+             mock.patch.object(broker, "_get_account", return_value=account), \
+             mock.patch.object(broker, "_get_access_token", return_value="synthetic"), \
+             mock.patch.object(broker, "validate_token_scopes"), \
+             mock.patch.object(broker, "_search_messages", return_value=(stubs, "")), \
+             mock.patch.object(broker, "_gmail_get", side_effect=gmail_get), \
+             mock.patch.object(broker, "broker_audit_log"):
+            result = broker.broker_search(
+                "sean",
+                after=target.isoformat(),
+                before=target.isoformat(),
+            )
+
+        self.assertEqual(
+            [entry["id"] for entry in result["data"]],
+            ["first-millisecond", "last-millisecond"],
+        )
+
     def test_search_keeps_operator_like_subject_text_inside_quotes(self):
         today = broker.datetime.date.today()
         after = (today - broker.datetime.timedelta(days=30)).isoformat()
@@ -238,13 +277,14 @@ class BrokerSecurityTests(unittest.TestCase):
         today = broker.datetime.date.today()
         after = (today - broker.datetime.timedelta(days=365)).isoformat()
         before = today.isoformat()
+        internal_date = str(broker._local_midnight_epoch(today) * 1000)
         account = {"can_read": True}
         with mock.patch.object(broker, "_load_accounts_config", return_value=[{"label": "sean", **account}]), \
              mock.patch.object(broker, "_get_account", return_value=account), \
              mock.patch.object(broker, "_get_access_token", return_value="synthetic"), \
              mock.patch.object(broker, "validate_token_scopes"), \
              mock.patch.object(broker, "_search_messages", return_value=([{"id": "m1", "threadId": "t1", "subject": "secret subject", "snippet": "secret snippet"}], "next_page-2=")), \
-             mock.patch.object(broker, "_gmail_get", return_value={"id": "m1", "threadId": "t1", "internalDate": "1760000000000", "payload": {"headers": [{"name": "Date", "value": "forged"}]}}):
+             mock.patch.object(broker, "_gmail_get", return_value={"id": "m1", "threadId": "t1", "internalDate": internal_date, "payload": {"headers": [{"name": "Date", "value": "forged"}]}}):
             result = broker.broker_search(
                 "sean",
                 after=after,
@@ -253,7 +293,7 @@ class BrokerSecurityTests(unittest.TestCase):
             )
         serialized = json.dumps(result)
         self.assertEqual(result["operation"], "search")
-        self.assertEqual(result["data"], [{"id": "m1", "threadId": "t1", "internalDate": "1760000000000", "screened": True}])
+        self.assertEqual(result["data"], [{"id": "m1", "threadId": "t1", "internalDate": internal_date, "screened": True}])
         self.assertEqual(result["nextPageToken"], "next_page-2=")
         self.assertNotIn("secret subject", serialized)
         self.assertNotIn("secret snippet", serialized)

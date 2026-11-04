@@ -49,7 +49,7 @@ DEFAULT_MAX_LIST = 5
 DEFAULT_DAYS_BACK = 7
 DEFAULT_SEARCH_PAGE_SIZE = 100
 MAX_SEARCH_PAGE_SIZE = 500
-BROKER_VERSION = '1.8.1'
+BROKER_VERSION = '1.8.2'
 SEARCH_FROM_RE = re.compile(
     r"^(?:[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@)?"
     r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
@@ -747,7 +747,7 @@ def broker_search(
     config_path: pathlib.Path | None = None,
 ) -> dict[str, Any]:
     """Search historical inbox mail without returning email-authored prose."""
-    validate_search_filters(
+    after_date, before_date = validate_search_filters(
         after=after,
         before=before,
         from_filter=from_filter,
@@ -772,12 +772,20 @@ def broker_search(
         mailbox=mailbox,
         page_token=page_token,
     )
+    start_ms = _local_midnight_epoch(after_date) * 1000
+    end_ms = _local_midnight_epoch(before_date + datetime.timedelta(days=1)) * 1000
     results = []
     for stub in stubs:
         meta = _gmail_get(access_token, f'messages/{stub["id"]}', {'format': 'metadata'})
         internal_date = str(meta.get('internalDate') or '')
         if not re.fullmatch(r'\d{10,16}', internal_date):
             raise ValueError('Gmail internalDate is missing or malformed')
+        # Gmail's epoch operators can admit a message from the adjacent second
+        # at a calendar-day boundary. Enforce the caller's exact half-open local
+        # date window against Gmail's authoritative millisecond timestamp.
+        internal_date_ms = int(internal_date)
+        if not start_ms <= internal_date_ms < end_ms:
+            continue
         results.append({
             'id': stub['id'],
             'threadId': stub.get('threadId', ''),
