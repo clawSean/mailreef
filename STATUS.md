@@ -1,9 +1,19 @@
-Updated: 2026-10-24T16:39:00-07:00 by Sean
+Updated: 2026-11-03T20:04:00-08:00 by Sean
 
 # STATUS
 
 ## State
 
+- **0.12.3 is offline-proven and ready to publish, but not activated.** Exact
+  context-bound OTP/MFA/verification values now survive in a bounded structured
+  `verificationCodes` field even when the summarizer does not repeat the value
+  in prose. Full HTTPS targets remain intact in structured `links`. Both are
+  computed from broker-screened source only after the independent post-detector
+  returns `SAFE`; arbitrary evidence stays hidden, and prompt-injected fixtures
+  release neither codes nor links. Final offline proof passes 41/41 Python
+  tests, the plugin security check, Python compilation, and Gitleaks. The
+  provenance commit and push remain pending. Runtime activation and a real
+  authorized canary remain separate.
 - **0.11.5 is live, enabled, and verified in the active runtime.** The plugin
   inventory reports `mailreef` version `0.11.5`; no Gateway restart was needed.
 - **Both isolated account lanes are restored.** Fresh exact-scope PKCE grants
@@ -44,6 +54,10 @@ Updated: 2026-10-24T16:39:00-07:00 by Sean
 
 ## Next
 
+- Finish offline proof, commit, and publish `0.12.3`; then hot-reload it through
+  the supported plugin reload path and verify runtime inventory, preflight, and
+  one owner-authorized OTP/link canary. Do not describe `0.12.3` as live before
+  that proof.
 - Use the restored JPop lane for the bounded Inbox Island calibration when that
   work resumes, keeping raw mail behind Mailreef's screening boundary.
 - If Google later revokes either grant, surface the stable reauthorization

@@ -292,21 +292,65 @@ function frameSenderRequest(claim) {
   if (/^[A-Z][a-z]/.test(fragment)) fragment = fragment[0].toLowerCase() + fragment.slice(1);
   return `${REQUEST_FRAME}${fragment}`;
 }
+function sourceStrings(source) {
+  if (source && typeof source === "object" && !Array.isArray(source)) {
+    return Object.values(source).filter((value) => typeof value === "string");
+  }
+  const raw = String(source || "");
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return Object.values(parsed).filter((value) => typeof value === "string");
+    }
+  } catch {
+    // A direct source string is also valid input for deterministic extractors.
+  }
+  return [raw];
+}
 function extractUntrustedHttpsLinks(sourceText) {
-  const matches = String(sourceText || "").match(/https:\/\/[^\s<>"']+/gi) || [];
   const links = [];
   const seen = new Set();
-  for (const raw of matches) {
-    const candidate = raw.replace(/[),.;!?]+$/, "");
-    if (candidate.length > 2048 || seen.has(candidate)) continue;
-    let parsed;
-    try { parsed = new URL(candidate); } catch { continue; }
-    if (parsed.protocol !== "https:" || !parsed.hostname || parsed.username || parsed.password) continue;
-    seen.add(candidate);
-    links.push({ url: candidate, hostname: parsed.hostname.toLowerCase(), untrusted: true });
-    if (links.length >= 10) break;
+  for (const source of sourceStrings(sourceText)) {
+    const matches = source.match(/https:\/\/[^\s<>"']+/gi) || [];
+    for (const raw of matches) {
+      const candidate = raw.replace(/[),.;!?]+$/, "");
+      if (candidate.length > 2048 || seen.has(candidate)) continue;
+      let parsed;
+      try { parsed = new URL(candidate); } catch { continue; }
+      if (parsed.protocol !== "https:" || !parsed.hostname || parsed.username || parsed.password) continue;
+      seen.add(candidate);
+      links.push({ url: candidate, hostname: parsed.hostname.toLowerCase(), untrusted: true });
+      if (links.length >= 10) return links;
+    }
   }
   return links;
+}
+function extractVerifiedCodes(sourceText) {
+  const codes = [];
+  const seen = new Set();
+  const valuePattern = String.raw`(?:[A-Z0-9]{2,12}(?:-[A-Z0-9]{2,12}){1,2}|(?:\d{2,6} ){1,3}\d{2,6}|[A-Z0-9]{4,12})`;
+  const patterns = [
+    new RegExp(String.raw`\b(?<kind>one[- ]time(?: verification)? code|verification code|security code|mfa code|otp|passcode)\b\s*(?:is|:|=|-)?\s*(?<value>${valuePattern})\b`, "gi"),
+    new RegExp(String.raw`\b(?:use|enter|provide)\s+(?<value>${valuePattern})\s+(?:as\s+)?(?:your\s+)?(?<kind>one[- ]time(?: verification)? code|verification code|security code|mfa code|otp|passcode)\b`, "gi"),
+  ];
+  for (const source of sourceStrings(sourceText)) {
+    for (const pattern of patterns) {
+      pattern.lastIndex = 0;
+      for (const match of source.matchAll(pattern)) {
+        const value = match.groups?.value?.trim();
+        const kind = match.groups?.kind?.toLowerCase().replace(/\s+/g, " ");
+        if (!value || !kind) continue;
+        const compact = value.replace(/[ -]/g, "");
+        if (compact.length < 4 || compact.length > 12 || !/\d/.test(compact)) continue;
+        const key = `${kind}\u0000${value}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        codes.push({ kind, value, evidenceVerified: true, untrusted: true });
+        if (codes.length >= 5) return codes;
+      }
+    }
+  }
+  return codes;
 }
 function validateEvidenceItems(items, source, label, maxItems) {
   if (!Array.isArray(items) || items.length > maxItems) throw new Error(`${label}_BOUNDS`);
@@ -451,7 +495,6 @@ async function summarizeAndGate(api, sourceText, pluginConfig) {
     }
   }
   const summary = redactVerifiedEvidence(verifiedSummary);
-  const links = extractUntrustedHttpsLinks(sourceText);
   const postResult = await isolatedCompleteStage(api, "POST_DETECTOR", {
     model: postDetectorModel,
     timeoutMs,
@@ -473,8 +516,10 @@ async function summarizeAndGate(api, sourceText, pluginConfig) {
     err.receipt = { verdict: post.verdict, reasonCodes: post.reasonCodes, model: postResult?.model || postDetectorModel };
     throw err;
   }
+  const links = extractUntrustedHttpsLinks(sourcePayload);
+  const verificationCodes = extractVerifiedCodes(sourcePayload);
   return {
-    summary: { ...summary, links },
+    summary: { ...summary, links, verificationCodes },
     receipt: {
       summarizer: { model: summaryResult?.model || summarizerModel, execution: "isolated-agent-runtime", attempts: summaryAttempts },
       postDetector: { model: postResult?.model || postDetectorModel, verdict: "SAFE", reasonCodes: post.reasonCodes },
@@ -577,7 +622,7 @@ async function executeScreenedRead(api, params) {
   }
 }
 
-export { configuredAccounts, normalizeRequest, buildBrokerArgs, verifyBrokerArtifact, invokeBroker, validateSummary, validatePostVerdict, extractUntrustedHttpsLinks, summarizeAndGate, processBrokerPayload };
+export { configuredAccounts, normalizeRequest, buildBrokerArgs, verifyBrokerArtifact, invokeBroker, validateSummary, validatePostVerdict, extractUntrustedHttpsLinks, extractVerifiedCodes, summarizeAndGate, processBrokerPayload };
 
 export default function register(api) {
   api.registerNodeHostCommand?.({ command: NODE_COMMAND, cap: "gmail-read", dangerous: true, handle: runLocalBroker });

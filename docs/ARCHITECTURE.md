@@ -24,10 +24,13 @@
    output, timeout, or outage all withhold the result.
 6. **The parent receives an untrusted envelope.** After both model gates pass,
    deterministic code extracts at most ten unique HTTPS URLs from the screened
-   source, rejects credential-bearing or malformed URLs, and emits each as
-   `{url, hostname, untrusted: true}`. Every result is labeled
+   source, rejects credential-bearing or malformed URLs, and emits each full
+   target as `{url, hostname, untrusted: true}`. It also extracts at most five
+   exact OTP/MFA/verification values only when a bounded code label is adjacent,
+   emitting `{kind, value, evidenceVerified: true, untrusted: true}`. Arbitrary
+   evidence quotes remain stripped. Every result is labeled
    `untrustedEmailDerived: true` and `canAuthorizeActions: false`. Blocked paths
-   contain no source or candidate content.
+   contain no source, code, URL, or candidate content.
 7. **The account is operator-allowlisted.** Tool callers may select only a Gmail
    account label explicitly enabled in plugin configuration; omission uses the
    configured default. The selected account, broker response account, operation, message

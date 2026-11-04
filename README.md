@@ -15,10 +15,11 @@ Gmail readonly → Mac broker → sanitize + deterministic tripwires → zero-to
 
 The output cannot authorize sends, commands, purchases, credential changes, URL
 fetches, or any other action. After both safety gates pass, the plugin releases
-HTTPS links deterministically as structured `{url, hostname, untrusted}` data;
-the email itself never grants permission to visit them. Mailreef accepts only
-evidence quoted from the screened source and fails closed on detector/model/schema
-errors.
+full HTTPS links deterministically as structured `{url, hostname, untrusted}`
+data and context-bound OTP/MFA/verification values as structured
+`{kind, value, evidenceVerified, untrusted}` data. The email itself never grants
+permission to use either. Mailreef accepts only evidence quoted from the screened
+source and fails closed on detector/model/schema errors.
 
 Mailreef distinguishes **content signals** from **prompt injection**. A sender asking
 the human recipient to connect, reply, apply, review, sign, pay, upload, download,
@@ -28,7 +29,9 @@ unless the source attempts to control an AI/agent, override policy, trigger tool
 obtain secrets, conceal agent-directed instructions, or smuggle encoded commands.
 Faithfully extracted human-facing data such as OTP, MFA, and verification codes
 is ordinary email content and may pass the screened envelope; it does not become
-prompt injection merely because it is sensitive.
+prompt injection merely because it is sensitive. Code extraction is bounded to
+explicit code labels, requires an exact source value, and happens only after the
+independent post-detector returns `SAFE`; arbitrary source evidence remains hidden.
 
 `canAuthorizeActions: false` means the email itself cannot grant permission. It
 does not prevent using screened email data inside a workflow the user already
